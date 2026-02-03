@@ -1,0 +1,154 @@
+# SenioCare API Documentation
+
+API documentation for backend integration with the SenioCare AI service.
+
+## Base URL
+
+```
+Local:      http://localhost:8080
+Production: <your-deployed-url>
+```
+
+## Quick Start
+
+### 1. Start the Server
+```bash
+python main.py
+# or with custom port
+python main.py --port 3000
+```
+
+### 2. Create a Session
+```bash
+curl -X POST http://localhost:8080/apps/seniocare/users/USER_ID/sessions/SESSION_ID \
+  -H "Content-Type: application/json" \
+  -d "{}"
+```
+
+### 3. Send a Message
+```bash
+curl -X POST http://localhost:8080/run_sse \
+  -H "Content-Type: application/json" \
+  -d '{
+    "app_name": "seniocare",
+    "user_id": "USER_ID",
+    "session_id": "SESSION_ID",
+    "new_message": {
+      "role": "user",
+      "parts": [{"text": "ممكن تقترح عليا وجبة فطار صحية؟"}]
+    },
+    "streaming": false
+  }'
+```
+
+---
+
+## Endpoints
+
+### List Available Agents
+```http
+GET /list-apps
+```
+
+**Response:**
+```json
+["seniocare"]
+```
+
+---
+
+### Create/Update Session
+```http
+POST /apps/{app_name}/users/{user_id}/sessions/{session_id}
+Content-Type: application/json
+
+{}
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| app_name | string | Agent name (`seniocare`) |
+| user_id | string | Your user's unique ID |
+| session_id | string | Unique conversation session ID |
+
+---
+
+### Run Agent
+```http
+POST /run_sse
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+    "app_name": "seniocare",
+    "user_id": "user_123",
+    "session_id": "session_abc",
+    "new_message": {
+        "role": "user",
+        "parts": [{"text": "User message in Arabic"}]
+    },
+    "streaming": false
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| app_name | string | Yes | Always `"seniocare"` |
+| user_id | string | Yes | User identifier |
+| session_id | string | Yes | Conversation session ID |
+| new_message.role | string | Yes | Always `"user"` |
+| new_message.parts | array | Yes | Array with `{"text": "..."}` |
+| streaming | boolean | No | `true` for SSE streaming |
+
+**Response (streaming: false):**
+```json
+{
+    "events": [
+        {
+            "type": "agent_response",
+            "content": "يا هلا! ..."
+        }
+    ]
+}
+```
+
+---
+
+## Session Management
+
+- Sessions persist across requests
+- Store `user_id` and `session_id` to maintain conversation history
+- Create new `session_id` for new conversations
+- Same `session_id` = continues previous conversation
+
+---
+
+## Integration Example (Node.js)
+
+```javascript
+async function sendMessage(userId, sessionId, message) {
+    const response = await fetch('http://localhost:8080/run_sse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            app_name: 'seniocare',
+            user_id: userId,
+            session_id: sessionId,
+            new_message: {
+                role: 'user',
+                parts: [{ text: message }]
+            },
+            streaming: false
+        })
+    });
+    return response.json();
+}
+```
+
+---
+
+## Web UI Testing
+
+Visit http://localhost:8080 in browser for interactive testing.
