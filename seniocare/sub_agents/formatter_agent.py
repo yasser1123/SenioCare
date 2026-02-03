@@ -173,7 +173,7 @@ SECTION 8: CRITICAL RULES
 
 formatter_agent = LlmAgent(
     name="formatter_agent",
-    model=LiteLlm(model="ollama_chat/thewindmom/llama3-med42-8b"),
+    model=LiteLlm(model="ollama_chat/llama3.1:8b"),
     instruction=FORMATTER_INSTRUCTION,
     description="Formats final recommendations into warm Egyptian Arabic with appropriate honorifics and caring tone",
     output_key="final_response",

@@ -123,6 +123,66 @@ Content-Type: application/json
 
 ---
 
+### Analyze Image (Vision AI)
+```http
+POST /analyze-image
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+    "user_id": "user_123",
+    "session_id": "session_abc",
+    "image_type": "medication",
+    "image_base64": "base64_encoded_image_data..."
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| user_id | string | Yes | User identifier |
+| session_id | string | Yes | Session identifier |
+| image_type | string | Yes | `"medication"` or `"medical_report"` |
+| image_base64 | string | Yes | Base64 encoded image |
+
+**Response (Medication):**
+```json
+{
+    "success": true,
+    "image_type": "medication",
+    "medication_info": {
+        "medication_name": "Metformin",
+        "active_ingredient": "Metformin Hydrochloride",
+        "dosage": "500mg",
+        "manufacturer": "Pharma Inc",
+        "expiry_date": "2025-12"
+    }
+}
+```
+
+**Response (Medical Report):**
+```json
+{
+    "success": true,
+    "image_type": "medical_report",
+    "report_info": {
+        "report_type": "blood_test",
+        "date": "2024-01-15",
+        "key_findings": ["Elevated blood sugar", "Normal cholesterol"],
+        "values": {
+            "blood_sugar": "180 mg/dL",
+            "cholesterol": "180 mg/dL"
+        },
+        "recommendations": ["Follow up with doctor"]
+    }
+}
+```
+
+> **Note:** Requires `llama3.2-vision` model. Run `ollama pull llama3.2-vision` if not installed.
+
+---
+
 ## Session Management
 
 - Sessions persist across requests

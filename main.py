@@ -186,6 +186,62 @@ def custom_openapi():
                         }
                     }
                 }
+            },
+            "/analyze-image": {
+                "post": {
+                    "summary": "Analyze Medical Image",
+                    "description": "Analyze medication or medical report images using vision AI",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["user_id", "session_id", "image_type", "image_base64"],
+                                    "properties": {
+                                        "user_id": {"type": "string", "example": "user_123"},
+                                        "session_id": {"type": "string", "example": "session_abc"},
+                                        "image_type": {"type": "string", "enum": ["medication", "medical_report"], "example": "medication"},
+                                        "image_base64": {"type": "string", "description": "Base64 encoded image"}
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "Image analysis result",
+                            "content": {
+                                "application/json": {
+                                    "examples": {
+                                        "medication": {
+                                            "value": {
+                                                "success": True,
+                                                "image_type": "medication",
+                                                "medication_info": {
+                                                    "medication_name": "Metformin",
+                                                    "active_ingredient": "Metformin Hydrochloride",
+                                                    "dosage": "500mg"
+                                                }
+                                            }
+                                        },
+                                        "medical_report": {
+                                            "value": {
+                                                "success": True,
+                                                "image_type": "medical_report",
+                                                "report_info": {
+                                                    "report_type": "blood_test",
+                                                    "key_findings": ["Elevated blood sugar"],
+                                                    "values": {"blood_sugar": "180 mg/dL"}
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -211,6 +267,65 @@ async def health_check():
         "service": "seniocare-api",
         "version": "1.0.0"
     }
+
+
+# =============================================================================
+# IMAGE ANALYSIS ENDPOINT
+# =============================================================================
+
+from pydantic import BaseModel
+from typing import Optional
+
+class ImageAnalysisRequest(BaseModel):
+    """Request model for image analysis."""
+    user_id: str
+    session_id: str
+    image_type: str  # "medical_report" or "medication"
+    image_base64: str  # Base64 encoded image
+
+
+@app.post("/analyze-image")
+async def analyze_image_endpoint(request: ImageAnalysisRequest):
+    """
+    Analyze medical images using vision AI.
+    
+    Supports two image types:
+    - `medication`: Extract medication name, active ingredient, dosage
+    - `medical_report`: Extract lab values, key findings, recommendations
+    
+    Requires llama3.2-vision model. Run `ollama pull llama3.2-vision` if not installed.
+    """
+    from seniocare.image_analysis import (
+        analyze_image,
+        ImageType,
+        validate_base64_image
+    )
+    
+    # Validate image type
+    try:
+        image_type = ImageType(request.image_type)
+    except ValueError:
+        return {
+            "success": False,
+            "error": f"Invalid image_type. Must be 'medication' or 'medical_report'"
+        }
+    
+    # Validate base64 image
+    if not validate_base64_image(request.image_base64):
+        return {
+            "success": False,
+            "error": "Invalid base64 image data"
+        }
+    
+    # Perform analysis
+    result = await analyze_image(
+        image_base64=request.image_base64,
+        image_type=image_type,
+        user_id=request.user_id,
+        session_id=request.session_id
+    )
+    
+    return result.model_dump()
 
 
 # =============================================================================
