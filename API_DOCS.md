@@ -9,6 +9,13 @@ Local:      http://localhost:8080
 Production: <your-deployed-url>
 ```
 
+> **Note on `/docs`:** The auto-generated FastAPI docs at `/docs` may show schema warnings due to ADK internal types. Use this documentation instead for complete API reference.
+
+## Additional Endpoints
+
+- **Health Check:** `GET /health` - Returns service status
+- **Custom Docs:** `GET /api-docs` - Redirects to web UI
+
 ## Quick Start
 
 ### 1. Start the Server

@@ -28,8 +28,15 @@ For backend integration:
 """
 import os
 import sys
+import warnings
 import uvicorn
+from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 from google.adk.cli.fast_api import get_fast_api_app
+
+# Suppress Pydantic schema generation warnings from ADK internals
+warnings.filterwarnings("ignore", message=".*Unable to generate pydantic-core schema.*")
+warnings.filterwarnings("ignore", message=".*EXPERIMENTAL.*")
 
 # =============================================================================
 # CONFIGURATION
@@ -66,6 +73,26 @@ app = get_fast_api_app(
     web=SERVE_WEB_INTERFACE,
 )
 
+# Add custom /docs redirect with helpful message
+@app.get("/api-docs")
+async def custom_docs():
+    """
+    Custom API documentation endpoint.
+    Redirects to the static API_DOCS.md file for complete documentation.
+    """
+    return RedirectResponse(url="/")
+
+# Add health check endpoint
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for monitoring."""
+    return {
+        "status": "healthy",
+        "service": "seniocare-api",
+        "version": "1.0.0"
+    }
+
+
 # =============================================================================
 # ENTRY POINT
 # =============================================================================
@@ -84,16 +111,16 @@ if __name__ == "__main__":
     
     print(f"""
 ╔══════════════════════════════════════════════════════════════╗
-║                    SenioCare API Server                       ║
+║                    SenioCare API Server                      ║
 ╠══════════════════════════════════════════════════════════════╣
-║  Running on: http://localhost:{port:<5}                          ║
+║  Running on: http://localhost:{port:<5}                      ║
 ║                                                              ║
 ║  Endpoints:                                                  ║
 ║    GET  /list-apps           - List agents                   ║
 ║    POST /run_sse             - Run agent                     ║
 ║    GET  /apps/seniocare/...  - Session management            ║
 ║                                                              ║
-║  Web UI: http://localhost:{port:<5}                              ║
+║  Web UI: http://localhost:{port:<5}                          ║
 ╚══════════════════════════════════════════════════════════════╝
     """)
     
