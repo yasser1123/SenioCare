@@ -73,6 +73,126 @@ app = get_fast_api_app(
     web=SERVE_WEB_INTERFACE,
 )
 
+# =============================================================================
+# FIX: Override OpenAPI schema to avoid Pydantic errors with MCP types
+# =============================================================================
+
+def custom_openapi():
+    """Generate a custom OpenAPI schema that avoids problematic types."""
+    return {
+        "openapi": "3.1.0",
+        "info": {
+            "title": "SenioCare API",
+            "description": "AI Healthcare Assistant for Elderly Care",
+            "version": "1.0.0"
+        },
+        "paths": {
+            "/list-apps": {
+                "get": {
+                    "summary": "List Available Agents",
+                    "description": "Returns a list of available agent applications",
+                    "responses": {
+                        "200": {
+                            "description": "List of agent names",
+                            "content": {
+                                "application/json": {
+                                    "example": ["seniocare"]
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "/health": {
+                "get": {
+                    "summary": "Health Check",
+                    "description": "Returns service health status",
+                    "responses": {
+                        "200": {
+                            "description": "Health status",
+                            "content": {
+                                "application/json": {
+                                    "example": {"status": "healthy", "service": "seniocare-api", "version": "1.0.0"}
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "/apps/{app_name}/users/{user_id}/sessions/{session_id}": {
+                "post": {
+                    "summary": "Create or Update Session",
+                    "description": "Initialize or update a session for a user",
+                    "parameters": [
+                        {"name": "app_name", "in": "path", "required": True, "schema": {"type": "string", "example": "seniocare"}},
+                        {"name": "user_id", "in": "path", "required": True, "schema": {"type": "string", "example": "user_123"}},
+                        {"name": "session_id", "in": "path", "required": True, "schema": {"type": "string", "example": "session_abc"}}
+                    ],
+                    "requestBody": {
+                        "content": {
+                            "application/json": {
+                                "example": {}
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {"description": "Session created/updated successfully"}
+                    }
+                }
+            },
+            "/run_sse": {
+                "post": {
+                    "summary": "Run Agent",
+                    "description": "Send a message to the agent and get a response",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "app_name": {"type": "string", "example": "seniocare"},
+                                        "user_id": {"type": "string", "example": "user_123"},
+                                        "session_id": {"type": "string", "example": "session_abc"},
+                                        "new_message": {
+                                            "type": "object",
+                                            "properties": {
+                                                "role": {"type": "string", "example": "user"},
+                                                "parts": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "text": {"type": "string", "example": "مرحبا"}
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "streaming": {"type": "boolean", "example": False}
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "Agent response",
+                            "content": {
+                                "application/json": {
+                                    "example": {"events": [{"type": "agent_response", "content": "..."}]}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+# Override the openapi method to use our custom schema
+app.openapi = custom_openapi
+
 # Add custom /docs redirect with helpful message
 @app.get("/api-docs")
 async def custom_docs():
