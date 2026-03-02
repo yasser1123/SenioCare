@@ -37,3 +37,6 @@ env/
 # Agent Development Kit
 .adk/
 brain/
+
+# Datasets
+Datasets/

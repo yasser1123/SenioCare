@@ -1,19 +1,24 @@
-"""Nutrition tool - provides condition-aware meal options."""
+"""Nutrition tool - provides condition-aware meal options from the database."""
 
+import json
 from google.adk.tools import ToolContext
+from seniocare.data.database import get_connection
 
 
-def get_meal_options(conditions: list, meal_type: str, tool_context: ToolContext) -> dict:
+def get_meal_options(meal_type: str, tool_context: ToolContext) -> dict:
     """
-    Returns meal options appropriate for the user's health conditions.
-    
+    Returns meal options appropriate for the user's health conditions,
+    allergies, and drug interactions.
+
+    Reads conditions, allergies, and medications from tool_context.state
+    (populated by the backend from the user profile).
+
     Args:
-        conditions: List of health conditions (e.g., ["diabetes", "hypertension"]).
         meal_type: Type of meal - breakfast, lunch, dinner, or snack.
         tool_context: The tool context for state access.
-        
+
     Returns:
-        dict: Meal options with recipes and nutritional info.
+        dict: Compact meal options with key nutrition info (max 3).
     """
     # Prevent multiple calls in the same turn
     if tool_context.state.get("_meal_tool_called"):
@@ -22,67 +27,182 @@ def get_meal_options(conditions: list, meal_type: str, tool_context: ToolContext
             "message": "تم استدعاء هذه الأداة بالفعل. استخدم النتيجة السابقة لصياغة التوصية."
         }
     tool_context.state["_meal_tool_called"] = True
-    # Condition-specific meal database
-    meal_database = {
-        "diabetes": {
-            "breakfast": [
-                {"name": "فول مدمس بزيت الزيتون", "name_en": "Foul Medames with Olive Oil",
-                 "ingredients": ["فول", "زيت زيتون", "ليمون", "كمون"],
-                 "notes": "منخفض السكر، غني بالألياف", "prep_time": "15 min"},
-                {"name": "بيض مسلوق مع خبز أسمر", "name_en": "Boiled Eggs with Whole Wheat Bread",
-                 "ingredients": ["بيض", "خبز أسمر", "خيار", "طماطم"],
-                 "notes": "بروتين عالي، كربوهيدرات معتدلة", "prep_time": "10 min"}
-            ],
-            "lunch": [
-                {"name": "سمك مشوي مع خضار", "name_en": "Grilled Fish with Vegetables",
-                 "ingredients": ["سمك", "بروكلي", "جزر", "ليمون"],
-                 "notes": "منخفض الدهون، غني بالأوميجا 3", "prep_time": "30 min"}
-            ],
-            "dinner": [
-                {"name": "شوربة عدس", "name_en": "Lentil Soup",
-                 "ingredients": ["عدس أصفر", "جزر", "بصل", "كمون", "ليمون"],
-                 "notes": "غني بالألياف والبروتين النباتي", "prep_time": "25 min"},
-                {"name": "سلطة دجاج مشوي", "name_en": "Grilled Chicken Salad",
-                 "ingredients": ["صدور دجاج", "خس", "خيار", "طماطم", "زيت زيتون"],
-                 "notes": "منخفض الكربوهيدرات", "prep_time": "20 min"}
-            ]
-        },
-        "hypertension": {
-            "dinner": [
-                {"name": "سمك مشوي بالأعشاب", "name_en": "Herb-Grilled Fish",
-                 "ingredients": ["سمك", "روزماري", "ثوم", "ليمون"],
-                 "notes": "بدون ملح، غني بالبوتاسيوم", "prep_time": "25 min"},
-                {"name": "خضار مطبوخة على البخار", "name_en": "Steamed Vegetables",
-                 "ingredients": ["بروكلي", "جزر", "فاصوليا خضراء"],
-                 "notes": "منخفض الصوديوم", "prep_time": "15 min"}
-            ]
-        },
-        "arthritis": {
-            "dinner": [
-                {"name": "سلمون مشوي", "name_en": "Grilled Salmon",
-                 "ingredients": ["سلمون", "زيت زيتون", "كركم", "زنجبيل"],
-                 "notes": "مضاد للالتهابات، غني بالأوميجا 3", "prep_time": "20 min"}
-            ]
+
+    # Read user profile from state
+    conditions = tool_context.state.get("user:conditions", [])
+    allergies = tool_context.state.get("user:allergies", [])
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        # Step 1: Get all meals of the requested type
+        cursor.execute(
+            "SELECT * FROM meals WHERE meal_type = ?",
+            (meal_type.lower(),)
+        )
+        all_meals = [dict(row) for row in cursor.fetchall()]
+
+        if not all_meals:
+            return {
+                "status": "no_meals",
+                "meal_type": meal_type,
+                "options": [],
+                "message": f"لا توجد وجبات متاحة من نوع {meal_type}"
+            }
+
+        # Step 2: Apply condition-based nutrient filtering
+        filtered_meals = all_meals
+        applied_rules = []
+
+        for condition in conditions:
+            cursor.execute(
+                "SELECT * FROM condition_dietary_rules WHERE condition = ?",
+                (condition.lower(),)
+            )
+            rule = cursor.fetchone()
+            if rule:
+                rule = dict(rule)
+                max_values = json.loads(rule["max_values"]) if rule["max_values"] else {}
+                applied_rules.append({
+                    "condition": condition,
+                    "max_values": max_values
+                })
+
+                # Filter meals that exceed the max values
+                new_filtered = []
+                for meal in filtered_meals:
+                    passes = True
+                    for nutrient, max_val in max_values.items():
+                        meal_value = meal.get(nutrient, 0)
+                        if meal_value is not None and meal_value > max_val:
+                            passes = False
+                            break
+                    if passes:
+                        new_filtered.append(meal)
+                filtered_meals = new_filtered
+
+        # Step 3: Exclude meals containing allergens
+        excluded_by_allergy = []
+        if allergies:
+            placeholders = ','.join('?' * len(allergies))
+            cursor.execute(
+                f"SELECT DISTINCT food_name FROM food_allergens WHERE allergen IN ({placeholders})",
+                [a.lower() for a in allergies]
+            )
+            allergen_foods = {row["food_name"].lower() for row in cursor.fetchall()}
+
+            safe_meals = []
+            for meal in filtered_meals:
+                ingredients = json.loads(meal["ingredients"])
+                ingredient_names = [i.lower() for i in ingredients]
+                conflicting = [f for f in allergen_foods if f in ingredient_names]
+                if conflicting:
+                    excluded_by_allergy.append({
+                        "meal": meal["name_ar"],
+                        "reason": f"يحتوي على مسبب حساسية: {', '.join(conflicting)}"
+                    })
+                else:
+                    safe_meals.append(meal)
+            filtered_meals = safe_meals
+
+        # Step 4: Format compact results (max 3 meals)
+        options = []
+        for meal in filtered_meals[:3]:
+            ingredients = json.loads(meal["ingredients"])
+            options.append({
+                "meal_id": meal["meal_id"],
+                "name_ar": meal["name_ar"],
+                "category": meal["category"],
+                "ingredients": ingredients,
+                "nutrition": {
+                    "energy_kcal": meal["energy_kcal"],
+                    "protein_g": meal["protein_g"],
+                    "fat_g": meal["fat_g"],
+                    "carbohydrate_g": meal["carbohydrate_g"],
+                    "sodium_mg": meal["sodium_mg"],
+                    "sugar_g": meal["sugar_g"],
+                },
+                "prep_time": meal["prep_time"],
+                "notes_ar": meal["notes_ar"],
+            })
+
+        return {
+            "status": "success",
+            "meal_type": meal_type,
+            "conditions_applied": [r["condition"] for r in applied_rules],
+            "allergies_excluded": allergies,
+            "options": options,
+            "excluded_by_allergy": excluded_by_allergy if excluded_by_allergy else None,
+            "total_found": len(options),
+            "disclaimer": "استشر طبيبك قبل تغيير نظامك الغذائي"
         }
-    }
-    
-    options = []
-    for condition in conditions:
-        if condition.lower() in meal_database:
-            meals = meal_database[condition.lower()].get(meal_type.lower(), [])
-            options.extend(meals)
-    
-    if not options:
-        # Default healthy options
-        options = [
-            {"name": "شوربة خضار", "name_en": "Vegetable Soup",
-             "ingredients": ["جزر", "بطاطس", "كوسة", "بصل"],
-             "notes": "وجبة صحية متوازنة", "prep_time": "30 min"}
-        ]
-    
-    return {
-        "status": "success",
-        "meal_type": meal_type,
-        "options": options[:3],  # Return max 3 options
-        "disclaimer": "استشر طبيبك قبل تغيير نظامك الغذائي"
-    }
+
+    finally:
+        conn.close()
+
+
+def get_meal_recipe(meal_id: str, tool_context: ToolContext) -> dict:
+    """
+    Returns the full recipe for a specific meal by its ID.
+
+    This should be called AFTER get_meal_options to get the complete
+    recipe details (cooking steps, tips, full nutrition, ingredients)
+    for a selected meal.
+
+    Args:
+        meal_id: The ID of the meal (e.g., "M005").
+        tool_context: The tool context for state access.
+
+    Returns:
+        dict: Full recipe with steps, tips, ingredients, and nutrition.
+    """
+    # Prevent multiple calls in the same turn
+    if tool_context.state.get("_recipe_tool_called"):
+        return {
+            "status": "already_called",
+            "message": "تم استدعاء أداة الوصفة بالفعل. استخدم النتيجة السابقة."
+        }
+    tool_context.state["_recipe_tool_called"] = True
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("SELECT * FROM meals WHERE meal_id = ?", (meal_id,))
+        meal = cursor.fetchone()
+
+        if not meal:
+            return {
+                "status": "not_found",
+                "message": f"لم يتم العثور على وجبة بالمعرف {meal_id}"
+            }
+
+        meal = dict(meal)
+        ingredients = json.loads(meal["ingredients"])
+        recipe_steps = json.loads(meal["recipe_steps"]) if meal["recipe_steps"] else []
+
+        return {
+            "status": "success",
+            "meal_id": meal["meal_id"],
+            "name_ar": meal["name_ar"],
+            "name_en": meal["name_en"],
+            "category": meal["category"],
+            "ingredients": ingredients,
+            "recipe_steps": recipe_steps,
+            "recipe_tips": meal["recipe_tips"],
+            "nutrition": {
+                "energy_kcal": meal["energy_kcal"],
+                "protein_g": meal["protein_g"],
+                "fat_g": meal["fat_g"],
+                "carbohydrate_g": meal["carbohydrate_g"],
+                "fiber_g": meal["fiber_g"],
+                "sodium_mg": meal["sodium_mg"],
+                "sugar_g": meal["sugar_g"],
+            },
+            "prep_time": meal["prep_time"],
+            "notes_ar": meal["notes_ar"],
+        }
+
+    finally:
+        conn.close()

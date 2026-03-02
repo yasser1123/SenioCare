@@ -1,17 +1,19 @@
-"""Exercise tool - provides safe exercises based on mobility and conditions."""
+"""Exercise tool - provides safe exercises based on mobility and conditions from the database."""
 
+import json
 from google.adk.tools import ToolContext
+from seniocare.data.database import get_connection
 
 
-def get_exercises(mobility_level: str, conditions: list, tool_context: ToolContext) -> dict:
+def get_exercises(tool_context: ToolContext) -> dict:
     """
     Returns safe exercises appropriate for the user's mobility level and conditions.
-    
+
+    Reads mobility_level and conditions from tool_context.state.
+
     Args:
-        mobility_level: User's mobility - "limited", "moderate", or "good".
-        conditions: List of health conditions to consider.
         tool_context: The tool context for state access.
-        
+
     Returns:
         dict: Safe exercise recommendations with instructions.
     """
@@ -22,103 +24,59 @@ def get_exercises(mobility_level: str, conditions: list, tool_context: ToolConte
             "message": "تم استدعاء هذه الأداة بالفعل. استخدم النتيجة السابقة لصياغة التوصية."
         }
     tool_context.state["_exercise_tool_called"] = True
-    conditions = conditions or []
-    
-    # Exercise database by mobility level
-    exercises = {
-        "limited": [
-            {
-                "name": "تمارين التنفس العميق",
-                "name_en": "Deep Breathing Exercises",
-                "type": "seated",
-                "duration": "5 دقائق",
-                "steps": [
-                    "اجلس بشكل مريح",
-                    "تنفس ببطء من الأنف لمدة 4 ثواني",
-                    "احبس النفس لمدة 4 ثواني",
-                    "أخرج النفس من الفم لمدة 6 ثواني",
-                    "كرر 5 مرات"
-                ],
-                "benefits": "يقلل التوتر ويحسن الأكسجين في الدم",
-                "safety": "توقف إذا شعرت بدوخة"
-            },
-            {
-                "name": "تمارين الكاحل",
-                "name_en": "Ankle Circles",
-                "type": "seated",
-                "duration": "3 دقائق",
-                "steps": [
-                    "اجلس على كرسي ثابت",
-                    "ارفع قدمك قليلاً عن الأرض",
-                    "أدر الكاحل في دوائر 10 مرات",
-                    "بدل الاتجاه",
-                    "كرر مع القدم الأخرى"
-                ],
-                "benefits": "يحسن الدورة الدموية في الساقين",
-                "safety": "لا تفرط في الحركة"
-            }
-        ],
-        "moderate": [
-            {
-                "name": "المشي في المكان",
-                "name_en": "Marching in Place",
-                "type": "standing",
-                "duration": "5 دقائق",
-                "steps": [
-                    "قف بجانب كرسي للاستناد",
-                    "ارفع ركبتك اليمنى",
-                    "أنزلها وارفع ركبتك اليسرى",
-                    "استمر ببطء لمدة 5 دقائق"
-                ],
-                "benefits": "يحسن اللياقة القلبية والتوازن",
-                "safety": "استخدم الكرسي للتوازن"
-            },
-            {
-                "name": "تمارين رفع الذراعين",
-                "name_en": "Arm Raises",
-                "type": "standing",
-                "duration": "3 دقائق",
-                "steps": [
-                    "قف أو اجلس بشكل مستقيم",
-                    "ارفع ذراعيك للأمام ببطء",
-                    "ارفعهما فوق رأسك",
-                    "أنزلهما ببطء",
-                    "كرر 10 مرات"
-                ],
-                "benefits": "يقوي عضلات الكتف والذراع",
-                "safety": "لا ترفع أعلى من راحتك"
-            }
-        ],
-        "good": [
-            {
-                "name": "المشي الخفيف",
-                "name_en": "Light Walking",
-                "type": "walking",
-                "duration": "15-20 دقيقة",
-                "steps": [
-                    "اختر مكاناً مستوياً وآمناً",
-                    "امشِ بخطوات ثابتة",
-                    "حافظ على وتيرة مريحة",
-                    "استرح كل 5 دقائق إذا لزم الأمر"
-                ],
-                "benefits": "يحسن صحة القلب والمزاج",
-                "safety": "تجنب الأسطح غير المستوية"
-            }
-        ]
-    }
-    
-    # Get exercises for mobility level
-    level = mobility_level.lower() if mobility_level else "limited"
-    recommended = exercises.get(level, exercises["limited"])
-    
-    # Filter based on conditions
-    if "arthritis" in [c.lower() for c in conditions]:
-        recommended = [e for e in recommended if e["type"] in ["seated", "standing"]]
-    
-    return {
-        "status": "success",
-        "mobility_level": level,
-        "exercises": recommended[:2],  # Return max 2 exercises
-        "general_advice": "استشر طبيبك قبل بدء أي برنامج تمارين جديد",
-        "warning": "توقف فوراً إذا شعرت بألم في الصدر أو ضيق في التنفس"
-    }
+
+    # Read from state
+    mobility_level = tool_context.state.get("user:mobility", "limited")
+    conditions = tool_context.state.get("user:conditions", [])
+    conditions_lower = [c.lower() for c in conditions]
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        # Get exercises for the user's mobility level
+        cursor.execute(
+            "SELECT * FROM exercises WHERE mobility_level = ?",
+            (mobility_level.lower(),)
+        )
+        all_exercises = [dict(row) for row in cursor.fetchall()]
+
+        # Filter out exercises that should be avoided for user's conditions
+        safe_exercises = []
+        excluded_exercises = []
+
+        for exercise in all_exercises:
+            avoid_conditions = json.loads(exercise["avoid_conditions"]) if exercise["avoid_conditions"] else []
+            avoid_lower = [c.lower() for c in avoid_conditions]
+
+            conflicting = [c for c in conditions_lower if c in avoid_lower]
+            if conflicting:
+                excluded_exercises.append({
+                    "name_en": exercise["name_en"],
+                    "reason": f"Not recommended for: {', '.join(conflicting)}"
+                })
+            else:
+                steps = json.loads(exercise["steps"])
+                safe_exercises.append({
+                    "exercise_id": exercise["exercise_id"],
+                    "name_ar": exercise["name_ar"],
+                    "type": exercise["exercise_type"],
+                    "duration": exercise["duration"],
+                    "steps": steps,
+                    "benefits_ar": exercise["benefits_ar"],
+                    "safety_ar": exercise["safety_ar"],
+                })
+
+        return {
+            "status": "success",
+            "mobility_level": mobility_level,
+            "conditions_considered": conditions,
+            "exercises": safe_exercises[:2],  # Return max 2 exercises
+            "excluded": excluded_exercises if excluded_exercises else None,
+            "total_found": len(safe_exercises),
+            "general_advice": "استشر طبيبك قبل بدء أي برنامج تمارين جديد",
+            "warning": "توقف فوراً إذا شعرت بألم في الصدر أو ضيق في التنفس"
+        }
+
+    finally:
+        conn.close()
