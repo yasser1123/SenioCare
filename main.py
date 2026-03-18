@@ -45,7 +45,7 @@ warnings.filterwarnings("ignore", message=".*EXPERIMENTAL.*")
 AGENT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Session storage - SQLite with async driver (persistent across restarts)
-SESSION_DB = "sqlite+aiosqlite:///./sessions.db"
+SESSION_DB = "sqlite+aiosqlite:////tmp/sessions.db" if os.environ.get("VERCEL") else "sqlite+aiosqlite:///./sessions.db"
 
 # Memory service - None = InMemoryMemoryService (default, lost on restart)
 # For production, use Vertex AI Memory Bank or custom persistent solution
