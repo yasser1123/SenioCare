@@ -149,7 +149,7 @@ in your TASK_PLAN with exact names and parameters:
 │   Parameters: meal_type (str) — "breakfast", "lunch", "dinner", "snack"    │
 │   Returns: Up to 3 meals with meal_id, name_ar, category, ingredients,    │
 │            nutrition (energy, protein, fat, carbs, sodium, sugar), notes   │
-│   Auto-reads: user_conditions, user_allergies from state                  │
+│   Auto-reads: user_chronicDiseases, user_allergies from state              │
 │   Use when: intent = meal                                                   │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │ TOOL: get_meal_recipe(meal_id)                                              │
@@ -166,7 +166,7 @@ in your TASK_PLAN with exact names and parameters:
 │ TOOL: assess_symptoms(symptoms)                                             │
 │   Parameters: symptoms (list) — e.g. ["headache", "dizziness"]             │
 │   Returns: Top 3 matched diseases with severity, confidence, precautions  │
-│   Auto-reads: user_conditions from state (boosts related diseases)         │
+│   Auto-reads: user_chronicDiseases from state (boosts related diseases)    │
 │   Use when: intent = symptom_assessment                                     │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │ TOOL: get_medication_schedule()                                             │
@@ -180,7 +180,7 @@ in your TASK_PLAN with exact names and parameters:
 │   Use when: User says they took their medication                            │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │ TOOL: get_exercises()                                                       │
-│   Parameters: none (reads mobility_level, conditions from state)            │
+│   Parameters: none (reads mobilityStatus, chronicDiseases from state)      │
 │   Returns: Up to 2 safe exercises with steps, benefits, safety notes       │
 │   Use when: intent = exercise                                               │
 ├─────────────────────────────────────────────────────────────────────────────┤
@@ -254,7 +254,7 @@ FOR ALLOWED REQUESTS — output this format:
 ---
 SAFETY_STATUS: ALLOWED
 INTENT: [meal / medication / exercise / symptom_assessment / medical_qa / emotional / routine / image_medication / image_report]
-USER_CONTEXT: [Full user profile: name, age, conditions, medications with doses, allergies, mobility, dietary prefs]
+USER_CONTEXT: [Full user profile: name, age, weight, height, gender, chronicDiseases, medications with doses, allergies, mobilityStatus, bloodType]
 TASK_PLAN: [Detailed tool-calling instructions — which tools, what parameters, in what order, what to do with results]
 ---
 

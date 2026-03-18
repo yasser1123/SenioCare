@@ -37,7 +37,7 @@ def assess_symptoms(symptoms: list, tool_context: ToolContext) -> dict:
         }
 
     # Read user's existing conditions from state
-    existing_conditions = tool_context.state.get("user:conditions", [])
+    existing_conditions = tool_context.state.get("user:chronicDiseases", [])
     existing_conditions_lower = [c.lower() for c in existing_conditions]
 
     # Normalize input symptoms

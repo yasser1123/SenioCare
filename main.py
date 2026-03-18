@@ -3,7 +3,7 @@ SenioCare API Server
 ====================
 FastAPI entry point for backend integration using ADK's built-in FastAPI support.
 
-Endpoints provided by ADK (automatically):
+Endpoints provided by ADK:
 - GET  /list-apps                                    - List available agents
 - POST /apps/{app}/users/{user}/sessions/{session}  - Create/update session
 - GET  /apps/{app}/users/{user}/sessions/{session}  - Get session info
@@ -78,246 +78,167 @@ app = get_fast_api_app(
 )
 
 # =============================================================================
-# FIX: Override OpenAPI schema to avoid Pydantic errors with MCP types
+# Smart OpenAPI schema — includes custom routes, hides crashing ADK internals
 # =============================================================================
 
 def custom_openapi():
-    """Generate a custom OpenAPI schema that avoids problematic types."""
-    return {
-        "openapi": "3.1.0",
-        "info": {
-            "title": "SenioCare API",
-            "description": "AI Healthcare Assistant for Elderly Care",
-            "version": "2.0.0"
-        },
-        "paths": {
-            "/list-apps": {
-                "get": {
-                    "summary": "List Available Agents",
-                    "description": "Returns a list of available agent applications",
-                    "responses": {
-                        "200": {
-                            "description": "List of agent names",
-                            "content": {
-                                "application/json": {
-                                    "example": ["seniocare"]
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            "/health": {
-                "get": {
-                    "summary": "Health Check",
-                    "description": "Returns service health status",
-                    "responses": {
-                        "200": {
-                            "description": "Health status",
-                            "content": {
-                                "application/json": {
-                                    "example": {"status": "healthy", "service": "seniocare-api", "version": "2.0.0"}
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            "/apps/{app_name}/users/{user_id}/sessions/{session_id}": {
-                "post": {
-                    "summary": "Create or Update Session",
-                    "description": "Initialize or update a session for a user",
-                    "parameters": [
-                        {"name": "app_name", "in": "path", "required": True, "schema": {"type": "string", "example": "seniocare"}},
-                        {"name": "user_id", "in": "path", "required": True, "schema": {"type": "string", "example": "user_123"}},
-                        {"name": "session_id", "in": "path", "required": True, "schema": {"type": "string", "example": "session_abc"}}
-                    ],
-                    "requestBody": {
-                        "content": {
-                            "application/json": {
-                                "example": {}
-                            }
-                        }
-                    },
-                    "responses": {
-                        "200": {"description": "Session created/updated successfully"}
-                    }
-                }
-            },
-            "/run_sse": {
-                "post": {
-                    "summary": "Run Agent",
-                    "description": "Send a message to the agent and get a response",
-                    "requestBody": {
-                        "required": True,
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "app_name": {"type": "string", "example": "seniocare"},
-                                        "user_id": {"type": "string", "example": "user_123"},
-                                        "session_id": {"type": "string", "example": "session_abc"},
-                                        "new_message": {
-                                            "type": "object",
-                                            "properties": {
-                                                "role": {"type": "string", "example": "user"},
-                                                "parts": {
-                                                    "type": "array",
-                                                    "items": {
-                                                        "type": "object",
-                                                        "properties": {
-                                                            "text": {"type": "string", "example": "مرحبا"}
-                                                        }
+    """
+    Generate a safe OpenAPI schema.
+
+    ADK injects internal routes whose Pydantic models use private types
+    (e.g. MCP / proto-plus) that cause schema generation to crash.
+    We build the schema ONLY for our custom endpoints so Swagger UI
+    shows a clean, working API documentation page.
+    """
+    from fastapi.openapi.utils import get_openapi
+
+    # Paths we manage ourselves
+    CUSTOM_PATHS = {
+        "/health", "/list-apps", "/api-docs", "/export-openapi",
+        "/set-user-profile/{user_id}",
+        "/get-user-profile/{user_id}",
+        "/sync-user-profile/{user_id}",
+        "/analyze-medication-image",
+        "/analyze-medical-report",
+        "/user-medical-reports/{user_id}",
+    }
+
+    # ADK paths we document manually (their models crash generation)
+    ADK_PATHS_MANUAL = {
+        "/run_sse": {
+            "post": {
+                "tags": ["Agent"],
+                "summary": "Run Agent",
+                "description": "Send a message to the SenioCare agent and receive a response. Use streaming: false for a single JSON response, or streaming: true for Server-Sent Events.",
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["app_name", "user_id", "session_id", "new_message"],
+                                "properties": {
+                                    "app_name": {"type": "string", "example": "seniocare", "description": "Always seniocare"},
+                                    "user_id": {"type": "string", "example": "user_123", "description": "The users unique identifier"},
+                                    "session_id": {"type": "string", "example": "session_abc", "description": "A unique session ID"},
+                                    "new_message": {
+                                        "type": "object",
+                                        "properties": {
+                                            "role": {"type": "string", "enum": ["user"], "example": "user"},
+                                            "parts": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "text": {"type": "string", "example": "\u0645\u0631\u062d\u0628\u0627", "description": "The users message text"}
                                                     }
                                                 }
                                             }
-                                        },
-                                        "streaming": {"type": "boolean", "example": False}
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "responses": {
-                        "200": {
-                            "description": "Agent response",
-                            "content": {
-                                "application/json": {
-                                    "example": {"events": [{"type": "agent_response", "content": "..."}]}
+                                        }
+                                    },
+                                    "streaming": {"type": "boolean", "example": False, "description": "false = single JSON, true = SSE stream"}
                                 }
                             }
                         }
                     }
-                }
-            },
-            "/set-user-profile/{user_id}": {
-                "post": {
-                    "summary": "Set User Profile",
-                    "description": "Push user health profile data to persist across all sessions",
-                    "parameters": [
-                        {"name": "user_id", "in": "path", "required": True, "schema": {"type": "string"}}
-                    ],
-                    "requestBody": {
-                        "required": True,
-                        "content": {
-                            "application/json": {
-                                "example": {
-                                    "user_name": "Ahmed",
-                                    "age": 72,
-                                    "conditions": ["diabetes", "hypertension"],
-                                    "allergies": ["shellfish"],
-                                    "medications": [{"name": "Metformin", "dose": "500mg"}],
-                                    "mobility": "limited"
-                                }
-                            }
-                        }
-                    },
-                    "responses": {
-                        "200": {"description": "Profile saved successfully"}
-                    }
-                }
-            },
-            "/get-user-profile/{user_id}": {
-                "get": {
-                    "summary": "Get User Profile",
-                    "description": "Retrieve user health profile data stored in session state",
-                    "parameters": [
-                        {"name": "user_id", "in": "path", "required": True, "schema": {"type": "string"}}
-                    ],
-                    "responses": {
-                        "200": {"description": "User profile data"}
-                    }
-                }
-            },
-            "/sync-user-profile/{user_id}": {
-                "post": {
-                    "summary": "Sync User Profile",
-                    "description": "Update user profile data when backend detects changes",
-                    "parameters": [
-                        {"name": "user_id", "in": "path", "required": True, "schema": {"type": "string"}}
-                    ],
-                    "requestBody": {
-                        "required": True,
-                        "content": {
-                            "application/json": {
-                                "example": {
-                                    "medications": [{"name": "Amlodipine", "dose": "5mg"}]
-                                }
-                            }
-                        }
-                    },
-                    "responses": {
-                        "200": {"description": "Profile synced successfully"}
-                    }
-                }
-            },
-            "/analyze-medication-image": {
-                "post": {
-                    "summary": "Analyze Medication Image",
-                    "description": "Extract medication name, active ingredient, and dose from medication box images using OCR AI (richardyoung/olmocr2:7b-q8). No database storage.",
-                    "requestBody": {
-                        "required": True,
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "required": ["user_id", "image_base64"],
-                                    "properties": {
-                                        "user_id": {"type": "string", "example": "user_123"},
-                                        "image_base64": {"type": "string", "description": "Base64 encoded image of medication box"}
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "responses": {
-                        "200": {
-                            "description": "Extracted medication info (name, active ingredient, dosage)"
-                        }
-                    }
-                }
-            },
-            "/analyze-medical-report": {
-                "post": {
-                    "summary": "Analyze Medical Report",
-                    "description": "Two-pass analysis of medical report images using llama3.2-vision. Extracts lab values, evaluates health situation, classifies severity. Results stored in database.",
-                    "requestBody": {
-                        "required": True,
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "required": ["user_id", "image_base64"],
-                                    "properties": {
-                                        "user_id": {"type": "string", "example": "user_123"},
-                                        "image_base64": {"type": "string", "description": "Base64 encoded image of medical report"}
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "responses": {
-                        "200": {
-                            "description": "Full report analysis with health summary and severity"
-                        }
-                    }
-                }
-            },
-            "/user-medical-reports/{user_id}": {
-                "get": {
-                    "summary": "Get User Medical Reports",
-                    "description": "Retrieve all previously analyzed medical reports for a user",
-                    "parameters": [
-                        {"name": "user_id", "in": "path", "required": True, "schema": {"type": "string"}}
-                    ],
-                    "responses": {
-                        "200": {"description": "List of analyzed reports"}
+                },
+                "responses": {
+                    "200": {
+                        "description": "Agent response with events",
+                        "content": {"application/json": {"example": {"events": [{"type": "agent_response", "content": "..."}]}}}
                     }
                 }
             }
-        }
+        },
+        "/apps/{app_name}/users/{user_id}/sessions/{session_id}": {
+            "post": {
+                "tags": ["Sessions"], "summary": "Create Session",
+                "description": "Create a new conversation session. Must be called before /run_sse.",
+                "parameters": [
+                    {"name": "app_name", "in": "path", "required": True, "schema": {"type": "string", "example": "seniocare"}},
+                    {"name": "user_id", "in": "path", "required": True, "schema": {"type": "string", "example": "user_123"}},
+                    {"name": "session_id", "in": "path", "required": True, "schema": {"type": "string", "example": "session_abc"}}
+                ],
+                "requestBody": {"content": {"application/json": {"example": {}}}},
+                "responses": {"200": {"description": "Session created successfully"}}
+            },
+            "get": {
+                "tags": ["Sessions"], "summary": "Get Session",
+                "description": "Retrieve session info and state.",
+                "parameters": [
+                    {"name": "app_name", "in": "path", "required": True, "schema": {"type": "string", "example": "seniocare"}},
+                    {"name": "user_id", "in": "path", "required": True, "schema": {"type": "string", "example": "user_123"}},
+                    {"name": "session_id", "in": "path", "required": True, "schema": {"type": "string", "example": "session_abc"}}
+                ],
+                "responses": {"200": {"description": "Session data"}}
+            },
+            "delete": {
+                "tags": ["Sessions"], "summary": "Delete Session",
+                "description": "Delete a specific session.",
+                "parameters": [
+                    {"name": "app_name", "in": "path", "required": True, "schema": {"type": "string", "example": "seniocare"}},
+                    {"name": "user_id", "in": "path", "required": True, "schema": {"type": "string", "example": "user_123"}},
+                    {"name": "session_id", "in": "path", "required": True, "schema": {"type": "string", "example": "session_abc"}}
+                ],
+                "responses": {"200": {"description": "Session deleted"}}
+            }
+        },
+        "/apps/{app_name}/users/{user_id}/sessions": {
+            "get": {
+                "tags": ["Sessions"], "summary": "List Sessions",
+                "description": "List all sessions for a user.",
+                "parameters": [
+                    {"name": "app_name", "in": "path", "required": True, "schema": {"type": "string", "example": "seniocare"}},
+                    {"name": "user_id", "in": "path", "required": True, "schema": {"type": "string", "example": "user_123"}}
+                ],
+                "responses": {"200": {"description": "List of session IDs"}}
+            }
+        },
     }
+
+    # Filter app routes to only safe custom ones
+    safe_routes = [r for r in app.routes if hasattr(r, "path") and r.path in CUSTOM_PATHS]
+
+    try:
+        schema = get_openapi(
+            title="SenioCare AI Agent API",
+            version="2.0.0",
+            description=(
+                "AI-powered healthcare assistant API for elderly care.\n\n"
+                "## Integration Guide\n"
+                "1. **Set user profile** via `/set-user-profile/{user_id}` after registration\n"
+                "2. **Create a session** via `POST /apps/seniocare/users/{user_id}/sessions/{session_id}`\n"
+                "3. **Send messages** via `POST /run_sse` with the session ID\n"
+                "4. **Image analysis** \u2014 upload medication or report images for AI extraction\n\n"
+                "## Models Required (Ollama)\n"
+                "- Chat: `llama3.1:8b`\n"
+                "- Medication OCR: `richardyoung/olmocr2:7b-q8`\n"
+                "- Report Analysis: `llama3.2-vision`\n"
+            ),
+            routes=safe_routes,
+        )
+    except Exception:
+        schema = {
+            "openapi": "3.1.0",
+            "info": {"title": "SenioCare AI Agent API", "version": "2.0.0"},
+            "paths": {},
+        }
+
+    # Merge ADK paths that we documented manually
+    for path, methods in ADK_PATHS_MANUAL.items():
+        schema["paths"][path] = methods
+
+    # Tag ordering for nice display
+    schema["tags"] = [
+        {"name": "Health", "description": "Service health and discovery"},
+        {"name": "User Profile", "description": "Push/pull user health profile data"},
+        {"name": "Image Analysis", "description": "AI-powered medication and medical report image analysis"},
+        {"name": "Agent", "description": "Send messages to the SenioCare AI agent"},
+        {"name": "Sessions", "description": "Conversation session management"},
+    ]
+
+    return schema
+
 
 # Override the openapi method to use our custom schema
 app.openapi = custom_openapi
@@ -326,23 +247,35 @@ app.openapi = custom_openapi
 # CUSTOM ENDPOINTS
 # =============================================================================
 
-@app.get("/api-docs")
+@app.get("/api-docs", tags=["Health"])
 async def custom_docs():
     """
-    Custom API documentation endpoint.
-    Redirects to the static API_DOCS.md file for complete documentation.
+    Redirect to the interactive Swagger UI documentation.
     """
-    return RedirectResponse(url="/")
+    return RedirectResponse(url="/docs")
 
-@app.get("/health")
+
+@app.get("/export-openapi", tags=["Health"])
+async def export_openapi():
+    """
+    Export the OpenAPI spec as downloadable JSON.
+
+    Use this to host static Swagger UI docs without deploying the server.
+    Save the output to a file and upload to GitHub Pages or SwaggerHub.
+    """
+    from fastapi.responses import JSONResponse
+    return JSONResponse(content=app.openapi(), media_type="application/json")
+
+@app.get("/health", tags=["Health"])
 async def health_check():
-    """Health check endpoint for monitoring."""
+    """Health check endpoint for monitoring and uptime checks."""
     return {
         "status": "healthy",
         "service": "seniocare-api",
         "version": "2.0.0",
         "session_db": SESSION_DB,
-        "memory_service": "InMemoryMemoryService"
+        "memory_service": "InMemoryMemoryService",
+        "docs": "/docs",
     }
 
 
@@ -361,25 +294,38 @@ class MedicationItem(BaseModel):
     dose: str
 
 class UserProfileRequest(BaseModel):
-    """Request model for setting user profile data."""
-    user_name: str
-    age: int
-    conditions: List[str] = []
+    """
+    Request model for setting user profile data.
+    Aligned with backend ElderCreate schema.
+    """
+    user_name: Optional[str] = None          # Display name (from Firebase, not on Elder)
+    age: Optional[int] = None
+    weight: Optional[float] = None           # kg
+    height: Optional[float] = None           # cm
+    gender: Optional[str] = None             # "male" / "female"
+    chronicDiseases: List[str] = []          # matches backend ElderCreate.chronicDiseases
     allergies: List[str] = []
-    medications: List[MedicationItem] = []
-    mobility: str = "limited"  # "limited", "moderate", "active"
+    medications: List[MedicationItem] = []   # AI-only (not on Elder model)
+    mobilityStatus: Optional[str] = "limited"  # matches backend ElderCreate.mobilityStatus
+    bloodType: Optional[str] = None          # e.g. "A+", "O-"
+    caregiver_ids: List[str] = []            # linked caregiver IDs
 
 class PartialProfileUpdate(BaseModel):
     """Request model for partial profile sync (only changed fields)."""
     user_name: Optional[str] = None
     age: Optional[int] = None
-    conditions: Optional[List[str]] = None
+    weight: Optional[float] = None
+    height: Optional[float] = None
+    gender: Optional[str] = None
+    chronicDiseases: Optional[List[str]] = None
     allergies: Optional[List[str]] = None
     medications: Optional[List[MedicationItem]] = None
-    mobility: Optional[str] = None
+    mobilityStatus: Optional[str] = None
+    bloodType: Optional[str] = None
+    caregiver_ids: Optional[List[str]] = None
 
 
-@app.post("/set-user-profile/{user_id}")
+@app.post("/set-user-profile/{user_id}", tags=["User Profile"])
 async def set_user_profile(user_id: str, profile: UserProfileRequest):
     """
     Push user health profile to persist across all sessions.
@@ -425,10 +371,15 @@ async def set_user_profile(user_id: str, profile: UserProfileRequest):
                 "user:user_id": user_id,
                 "user:user_name": profile.user_name,
                 "user:age": profile.age,
-                "user:conditions": profile.conditions,
+                "user:weight": profile.weight,
+                "user:height": profile.height,
+                "user:gender": profile.gender,
+                "user:chronicDiseases": profile.chronicDiseases,
                 "user:allergies": profile.allergies,
                 "user:medications": [m.model_dump() for m in profile.medications],
-                "user:mobility": profile.mobility,
+                "user:mobilityStatus": profile.mobilityStatus,
+                "user:bloodType": profile.bloodType,
+                "user:caregiver_ids": profile.caregiver_ids,
             }
         )
 
@@ -445,8 +396,9 @@ async def set_user_profile(user_id: str, profile: UserProfileRequest):
             "user_id": user_id,
             "profile_keys": [
                 "user:user_id", "user:user_name", "user:age",
-                "user:conditions", "user:allergies", "user:medications",
-                "user:mobility"
+                "user:weight", "user:height", "user:gender",
+                "user:chronicDiseases", "user:allergies", "user:medications",
+                "user:mobilityStatus", "user:bloodType", "user:caregiver_ids"
             ]
         }
 
@@ -454,7 +406,7 @@ async def set_user_profile(user_id: str, profile: UserProfileRequest):
         raise HTTPException(status_code=500, detail=f"Failed to save profile: {str(e)}")
 
 
-@app.get("/get-user-profile/{user_id}")
+@app.get("/get-user-profile/{user_id}", tags=["User Profile"])
 async def get_user_profile(user_id: str):
     """
     Get the user's health profile data stored in session state.
@@ -492,10 +444,15 @@ async def get_user_profile(user_id: str):
             "user_id": session.state.get("user:user_id"),
             "user_name": session.state.get("user:user_name"),
             "age": session.state.get("user:age"),
-            "conditions": session.state.get("user:conditions"),
+            "weight": session.state.get("user:weight"),
+            "height": session.state.get("user:height"),
+            "gender": session.state.get("user:gender"),
+            "chronicDiseases": session.state.get("user:chronicDiseases"),
             "allergies": session.state.get("user:allergies"),
             "medications": session.state.get("user:medications"),
-            "mobility": session.state.get("user:mobility"),
+            "mobilityStatus": session.state.get("user:mobilityStatus"),
+            "bloodType": session.state.get("user:bloodType"),
+            "caregiver_ids": session.state.get("user:caregiver_ids"),
         }
 
         # Clean up temporary session
@@ -523,7 +480,7 @@ async def get_user_profile(user_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to get profile: {str(e)}")
 
 
-@app.post("/sync-user-profile/{user_id}")
+@app.post("/sync-user-profile/{user_id}", tags=["User Profile"])
 async def sync_user_profile(user_id: str, updates: PartialProfileUpdate):
     """
     Sync updated user profile data (partial update).
@@ -555,14 +512,24 @@ async def sync_user_profile(user_id: str, updates: PartialProfileUpdate):
             state_updates["user:user_name"] = updates.user_name
         if updates.age is not None:
             state_updates["user:age"] = updates.age
-        if updates.conditions is not None:
-            state_updates["user:conditions"] = updates.conditions
+        if updates.weight is not None:
+            state_updates["user:weight"] = updates.weight
+        if updates.height is not None:
+            state_updates["user:height"] = updates.height
+        if updates.gender is not None:
+            state_updates["user:gender"] = updates.gender
+        if updates.chronicDiseases is not None:
+            state_updates["user:chronicDiseases"] = updates.chronicDiseases
         if updates.allergies is not None:
             state_updates["user:allergies"] = updates.allergies
         if updates.medications is not None:
             state_updates["user:medications"] = [m.model_dump() for m in updates.medications]
-        if updates.mobility is not None:
-            state_updates["user:mobility"] = updates.mobility
+        if updates.mobilityStatus is not None:
+            state_updates["user:mobilityStatus"] = updates.mobilityStatus
+        if updates.bloodType is not None:
+            state_updates["user:bloodType"] = updates.bloodType
+        if updates.caregiver_ids is not None:
+            state_updates["user:caregiver_ids"] = updates.caregiver_ids
 
         if not state_updates:
             return {
@@ -612,7 +579,7 @@ class MedicalReportRequest(BaseModel):
     image_base64: str  # Base64 encoded image of medical report
 
 
-@app.post("/analyze-medication-image")
+@app.post("/analyze-medication-image", tags=["Image Analysis"])
 async def analyze_medication_image_endpoint(request: MedicationImageRequest):
     """
     Analyze a medication box/package image using OCR AI.
@@ -644,7 +611,7 @@ async def analyze_medication_image_endpoint(request: MedicationImageRequest):
     return result.model_dump()
 
 
-@app.post("/analyze-medical-report")
+@app.post("/analyze-medical-report", tags=["Image Analysis"])
 async def analyze_medical_report_endpoint(request: MedicalReportRequest):
     """
     Analyze a medical report image using vision AI.
@@ -675,7 +642,7 @@ async def analyze_medical_report_endpoint(request: MedicalReportRequest):
     return result.model_dump()
 
 
-@app.get("/user-medical-reports/{user_id}")
+@app.get("/user-medical-reports/{user_id}", tags=["Image Analysis"])
 async def get_user_medical_reports(user_id: str):
     """
     Retrieve all previously analyzed medical reports for a user.
@@ -725,12 +692,12 @@ if __name__ == "__main__":
 ║    POST /set-user-profile    - Push user profile             ║
 ║    GET  /get-user-profile    - Get user profile              ║
 ║    POST /sync-user-profile   - Sync profile changes          ║
-║    POST /analyze-medication-image - Medication OCR (olmocr2)    ║
-║    POST /analyze-medical-report   - Report analysis (llama3.2) ║
-║    GET  /user-medical-reports     - Report history              ║
+║    POST /analyze-medication-image - Medication OCR (olmocr2) ║
+║    POST /analyze-medical-report   - Report analysis (llama3.2)║
+║    GET  /user-medical-reports     - Report history           ║
 ║    GET  /health              - Health check                  ║
 ║                                                              ║
-║  Session DB: {SESSION_DB:<30}           ║
+║  Session DB: {SESSION_DB:<30}                                ║
 ║  Memory:     InMemoryMemoryService (dev)                     ║
 ║  Web UI:     http://localhost:{port:<5}                      ║
 ╚══════════════════════════════════════════════════════════════╝

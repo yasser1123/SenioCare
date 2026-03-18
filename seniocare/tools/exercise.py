@@ -26,8 +26,8 @@ def get_exercises(tool_context: ToolContext) -> dict:
     tool_context.state["_exercise_tool_called"] = True
 
     # Read from state
-    mobility_level = tool_context.state.get("user:mobility", "limited")
-    conditions = tool_context.state.get("user:conditions", [])
+    mobility_level = tool_context.state.get("user:mobilityStatus", "limited")
+    conditions = tool_context.state.get("user:chronicDiseases", [])
     conditions_lower = [c.lower() for c in conditions]
 
     conn = get_connection()

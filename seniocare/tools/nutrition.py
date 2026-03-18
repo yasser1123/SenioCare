@@ -29,7 +29,7 @@ def get_meal_options(meal_type: str, tool_context: ToolContext) -> dict:
     tool_context.state["_meal_tool_called"] = True
 
     # Read user profile from state
-    conditions = tool_context.state.get("user:conditions", [])
+    conditions = tool_context.state.get("user:chronicDiseases", [])
     allergies = tool_context.state.get("user:allergies", [])
 
     conn = get_connection()

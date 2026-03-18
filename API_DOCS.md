@@ -1,138 +1,31 @@
-# SenioCare API Documentation v2.0
+# SenioCare AI Agent — API Documentation
 
-API documentation for backend integration with the SenioCare AI service.
-
-## Base URL
-
-```
-Local:      http://localhost:8080
-Production: <your-deployed-url>
-```
-
-> **Note on `/docs`:** The auto-generated FastAPI docs at `/docs` may show schema warnings due to ADK internal types. Use this documentation instead for complete API reference.
+> **Base URL:** `http://localhost:8080` (development)
+> **Swagger UI:** `http://localhost:8080/docs`
+> **ReDoc:** `http://localhost:8080/redoc`
+> **OpenAPI JSON:** `http://localhost:8080/export-openapi`
 
 ---
 
-## Quick Start
+## Quick Start (Backend Integration)
 
-### 1. Start the Server
-```bash
-python main.py
-# or with custom port
-python main.py --port 3000
 ```
-
-### 2. Push User Profile (first time or on update)
-```bash
-curl -X POST http://localhost:8080/set-user-profile/user_123 \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_name": "Ahmed",
-    "age": 72,
-    "conditions": ["diabetes", "hypertension"],
-    "allergies": ["shellfish"],
-    "medications": [
-      {"name": "Metformin", "dose": "500mg"},
-      {"name": "Lisinopril", "dose": "10mg"}
-    ],
-    "mobility": "limited"
-  }'
-```
-
-### 3. Create a Session (new chat)
-```bash
-curl -X POST http://localhost:8080/apps/seniocare/users/user_123/sessions/session_001 \
-  -H "Content-Type: application/json" \
-  -d "{}"
-```
-
-### 4. Send a Message
-```bash
-curl -X POST http://localhost:8080/run_sse \
-  -H "Content-Type: application/json" \
-  -d '{
-    "app_name": "seniocare",
-    "user_id": "user_123",
-    "session_id": "session_001",
-    "new_message": {
-      "role": "user",
-      "parts": [{"text": "ممكن تقترح عليا وجبة فطار صحية؟"}]
-    },
-    "streaming": false
-  }'
+1. Start the AI agent server:    python main.py
+2. Set user profile:             POST /set-user-profile/{user_id}
+3. Create a session:             POST /apps/seniocare/users/{user_id}/sessions/{session_id}
+4. Send a message:               POST /run_sse
 ```
 
 ---
-
-## Architecture & Data Flow
-
-### Session & Memory System
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Flutter App (Frontend)                   │
-│  • User registration → sends profile to backend             │
-│  • Chat UI → sends messages via backend                     │
-└─────────────────────┬───────────────────────────────────────┘
-                      │
-┌─────────────────────▼───────────────────────────────────────┐
-│                  Backend Server (Firebase/REST)              │
-│  • Stores user profiles in main DB                          │
-│  • Manages session IDs (creates new for each chat)          │
-│  • On registration/profile change:                          │
-│    → POST /set-user-profile/{user_id}                       │
-│  • On each message:                                         │
-│    → POST /run_sse (with user_id + session_id)              │
-└─────────────────────┬───────────────────────────────────────┘
-                      │
-┌─────────────────────▼───────────────────────────────────────┐
-│            SenioCare AI Service (this server)                │
-│                                                             │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  DatabaseSessionService (sessions.db - SQLite)        │   │
-│  │  • Stores session events (chat history)               │   │
-│  │  • Stores state with prefix scoping:                  │   │
-│  │    - user: prefix → persists across ALL sessions      │   │
-│  │    - no prefix   → persists within ONE session        │   │
-│  │    - temp: prefix → ONE invocation only               │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                                                             │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  InMemoryMemoryService (long-term memory)             │   │
-│  │  • Archives past sessions for cross-session recall    │   │
-│  │  • Lost on server restart (dev mode)                  │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                                                             │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  3-Agent Pipeline                                     │   │
-│  │  1. Orchestrator → Safety + Intent + Planning         │   │
-│  │  2. Feature Agent → Tool Calls + Decisions            │   │
-│  │  3. Formatter → Egyptian Arabic response              │   │
-│  └──────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### State Key Reference
-
-| Key | Prefix | Scope | Example |
-|-----|--------|-------|---------|
-| `user:user_id` | `user:` | All sessions for this user | `"user_firebase_123"` |
-| `user:user_name` | `user:` | All sessions for this user | `"Ahmed"` |
-| `user:age` | `user:` | All sessions for this user | `72` |
-| `user:conditions` | `user:` | All sessions for this user | `["diabetes", "hypertension"]` |
-| `user:medications` | `user:` | All sessions for this user | `[{"name":"Metformin","dose":"500mg"}]` |
-| `user:allergies` | `user:` | All sessions for this user | `["shellfish"]` |
-| `user:mobility` | `user:` | All sessions for this user | `"limited"` |
-| `conversation_turn_count` | *(none)* | Current session only | `3` |
 
 ---
 
 ## Endpoints
 
-### Health Check
-```http
-GET /health
-```
+### 🟢 Health
+
+#### `GET /health`
+Health check endpoint for monitoring.
 
 **Response:**
 ```json
@@ -141,82 +34,92 @@ GET /health
     "service": "seniocare-api",
     "version": "2.0.0",
     "session_db": "sqlite+aiosqlite:///./sessions.db",
-    "memory_service": "InMemoryMemoryService"
+    "memory_service": "InMemoryMemoryService",
+    "docs": "/docs"
 }
 ```
 
----
-
-### List Available Agents
-```http
-GET /list-apps
-```
-
-**Response:**
-```json
-["seniocare"]
+**cURL:**
+```bash
+curl http://localhost:8080/health
 ```
 
 ---
 
-### Set User Profile ⭐ NEW
-```http
-POST /set-user-profile/{user_id}
-Content-Type: application/json
+#### `GET /export-openapi`
+Download the OpenAPI spec as JSON (for static Swagger hosting).
+
+**cURL:**
+```bash
+curl http://localhost:8080/export-openapi > openapi.json
 ```
 
-Push user health profile to persist across ALL sessions. Call this:
-- **Once** after user registration
-- **Again** when user profile changes (use `/sync-user-profile` for partial updates)
+---
 
-**Request Body:**
+### 👤 User Profile
+
+#### `POST /set-user-profile/{user_id}`
+Push user health profile data to persist across all sessions.
+
+**When to call:** After user registration or when the full profile changes.
+
+**Request Body (aligned with backend `ElderCreate` schema):**
 ```json
 {
     "user_name": "Ahmed",
     "age": 72,
-    "conditions": ["diabetes", "hypertension"],
+    "weight": 78.0,
+    "height": 170.0,
+    "gender": "male",
+    "chronicDiseases": ["diabetes", "hypertension"],
     "allergies": ["shellfish"],
     "medications": [
         {"name": "Metformin", "dose": "500mg"},
         {"name": "Lisinopril", "dose": "10mg"}
     ],
-    "mobility": "limited"
+    "mobilityStatus": "limited",
+    "bloodType": "A+",
+    "caregiver_ids": []
 }
 ```
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| user_name | string | Yes | User's display name |
-| age | integer | Yes | User's age |
-| conditions | string[] | No | Health conditions (e.g., diabetes, hypertension) |
-| allergies | string[] | No | Food allergies (e.g., shellfish, peanuts) |
-| medications | object[] | No | Array of `{name, dose}` medication objects |
-| mobility | string | No | `"limited"`, `"moderate"`, or `"active"` (default: `"limited"`) |
+| `user_name` | string | ❌ | User's display name (from Firebase) |
+| `age` | integer | ❌ | User's age |
+| `weight` | float | ❌ | Weight in kg |
+| `height` | float | ❌ | Height in cm |
+| `gender` | string | ❌ | `"male"` or `"female"` |
+| `chronicDiseases` | string[] | ❌ | Chronic conditions: `diabetes`, `hypertension`, `heart disease`, `arthritis`, `kidney disease` |
+| `allergies` | string[] | ❌ | Food allergies: `shellfish`, `dairy`, `gluten`, `fish`, `eggs`, `nuts` |
+| `medications` | object[] | ❌ | Each with `name` (string) and `dose` (string) |
+| `mobilityStatus` | string | ❌ | `"limited"`, `"moderate"`, or `"active"` (default: `"limited"`) |
+| `bloodType` | string | ❌ | e.g. `"A+"`, `"O-"`, `"B+"` |
+| `caregiver_ids` | string[] | ❌ | Linked caregiver IDs from backend |
 
-**Response:**
+**Response (200):**
 ```json
 {
     "success": true,
     "message": "Profile saved for user user_123",
     "user_id": "user_123",
-    "profile_keys": [
-        "user:user_id", "user:user_name", "user:age",
-        "user:conditions", "user:allergies", "user:medications",
-        "user:mobility"
-    ]
+    "profile_keys": ["user:user_id", "user:user_name", "user:age", "user:weight", "user:height", "user:gender", "user:chronicDiseases", "user:allergies", "user:medications", "user:mobilityStatus", "user:bloodType", "user:caregiver_ids"]
 }
+```
+
+**cURL:**
+```bash
+curl -X POST http://localhost:8080/set-user-profile/user_123 \
+  -H "Content-Type: application/json" \
+  -d '{"user_name":"Ahmed","age":72,"weight":78.0,"height":170.0,"gender":"male","chronicDiseases":["diabetes"],"allergies":[],"medications":[{"name":"Metformin","dose":"500mg"}],"mobilityStatus":"limited","bloodType":"A+"}'
 ```
 
 ---
 
-### Get User Profile ⭐ NEW
-```http
-GET /get-user-profile/{user_id}
-```
+#### `GET /get-user-profile/{user_id}`
+Retrieve user health profile data.
 
-Retrieve user health profile data that was previously saved.
-
-**Response (profile exists):**
+**Response (200 — profile exists):**
 ```json
 {
     "success": true,
@@ -225,55 +128,50 @@ Retrieve user health profile data that was previously saved.
         "user_id": "user_123",
         "user_name": "Ahmed",
         "age": 72,
-        "conditions": ["diabetes", "hypertension"],
-        "allergies": ["shellfish"],
-        "medications": [
-            {"name": "Metformin", "dose": "500mg"},
-            {"name": "Lisinopril", "dose": "10mg"}
-        ],
-        "mobility": "limited"
+        "weight": 78.0,
+        "height": 170.0,
+        "gender": "male",
+        "chronicDiseases": ["diabetes"],
+        "allergies": [],
+        "medications": [{"name": "Metformin", "dose": "500mg"}],
+        "mobilityStatus": "limited",
+        "bloodType": "A+",
+        "caregiver_ids": []
     }
 }
 ```
 
-**Response (no profile):**
+**Response (200 — profile not found):**
 ```json
 {
     "success": false,
-    "message": "No profile found for user user_456. Call /set-user-profile first.",
+    "message": "No profile found for user xyz. Call /set-user-profile first.",
     "profile": null
 }
 ```
 
----
-
-### Sync User Profile (Partial Update) ⭐ NEW
-```http
-POST /sync-user-profile/{user_id}
-Content-Type: application/json
+**cURL:**
+```bash
+curl http://localhost:8080/get-user-profile/user_123
 ```
 
-Update only the changed fields when the backend detects profile changes.
-Only send the fields that changed — other fields remain unchanged.
+---
 
-**Example: Doctor changed medication**
+#### `POST /sync-user-profile/{user_id}`
+Partial profile update — only send the fields that changed.
+
+**When to call:** When the backend detects profile changes (e.g. doctor changed medication).
+
+**Request Body (only changed fields):**
 ```json
 {
     "medications": [
-        {"name": "Metformin", "dose": "500mg"},
         {"name": "Amlodipine", "dose": "5mg"}
     ]
 }
 ```
 
-**Example: New allergy discovered**
-```json
-{
-    "allergies": ["shellfish", "peanuts"]
-}
-```
-
-**Response:**
+**Response (200):**
 ```json
 {
     "success": true,
@@ -282,56 +180,151 @@ Only send the fields that changed — other fields remain unchanged.
 }
 ```
 
----
-
-### Create/Update Session
-```http
-POST /apps/{app_name}/users/{user_id}/sessions/{session_id}
-Content-Type: application/json
-
-{}
+**Response (200 — no fields):**
+```json
+{
+    "success": false,
+    "message": "No fields provided for update"
+}
 ```
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| app_name | string | Agent name (`seniocare`) |
-| user_id | string | Your user's unique ID (same as used in `/set-user-profile`) |
-| session_id | string | Unique conversation session ID (UUID recommended) |
-
----
-
-### List User Sessions
-```http
-GET /apps/{app_name}/users/{user_id}/sessions
+**cURL:**
+```bash
+curl -X POST http://localhost:8080/sync-user-profile/user_123 \
+  -H "Content-Type: application/json" \
+  -d '{"medications":[{"name":"Amlodipine","dose":"5mg"}]}'
 ```
-
-Returns all active sessions for a user. Use this for a "chat history" screen.
 
 ---
 
-### Get Session Details
-```http
-GET /apps/{app_name}/users/{user_id}/sessions/{session_id}
+### 🖼️ Image Analysis
+
+#### `POST /analyze-medication-image`
+Extract medication info from a photo of a medication box using OCR AI.
+
+**Requires:** Ollama model `richardyoung/olmocr2:7b-q8`
+
+**Request Body:**
+```json
+{
+    "user_id": "user_123",
+    "image_base64": "<base64 encoded image>"
+}
 ```
 
-Returns session details including events (chat history) and state.
+**Response (200 — success):**
+```json
+{
+    "success": true,
+    "medication_name": "Panadol Extra",
+    "active_ingredient": "Paracetamol + Caffeine",
+    "dosage": "500mg/65mg",
+    "manufacturer": "GSK",
+    "expiry_date": "12/2026",
+    "error": null
+}
+```
+
+**Response (200 — invalid image):**
+```json
+{
+    "success": false,
+    "error": "Invalid base64 image data"
+}
+```
+
+**cURL:**
+```bash
+curl -X POST http://localhost:8080/analyze-medication-image \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"user_123","image_base64":"<BASE64>"}'
+```
 
 ---
 
-### Delete Session
-```http
-DELETE /apps/{app_name}/users/{user_id}/sessions/{session_id}
+#### `POST /analyze-medical-report`
+Two-pass analysis of medical report images (lab tests, blood work, etc).
+
+**Requires:** Ollama model `llama3.2-vision`
+
+**Request Body:**
+```json
+{
+    "user_id": "user_123",
+    "image_base64": "<base64 encoded image>"
+}
 ```
 
-Delete a conversation. The `user:`-prefixed state (profile data) is NOT deleted.
+**Response (200 — success):**
+```json
+{
+    "success": true,
+    "report_id": "RPT_a1b2c3d4e5f6",
+    "report_type": "blood_test",
+    "report_date": "2025-01-15",
+    "key_findings": ["Elevated fasting glucose", "Low HDL cholesterol"],
+    "lab_values": {
+        "fasting glucose": "180 mg/dL (ref: 70-100)",
+        "HbA1c": "8.5%",
+        "total cholesterol": "220 mg/dL"
+    },
+    "health_summary": "Your blood sugar levels are elevated...",
+    "severity_level": "ATTENTION",
+    "recommendations": ["Monitor glucose daily", "Follow up with doctor"],
+    "safety_disclaimers": ["⚕️ This analysis is generated by AI..."],
+    "stored_in_db": true,
+    "error": null
+}
+```
+
+| Severity Level | Meaning |
+|---------------|---------|
+| `NORMAL` | All values within acceptable ranges |
+| `ATTENTION` | Some values slightly out of range, needs monitoring |
+| `CRITICAL` | Significantly out of range, needs prompt medical attention |
+
+**cURL:**
+```bash
+curl -X POST http://localhost:8080/analyze-medical-report \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"user_123","image_base64":"<BASE64>"}'
+```
 
 ---
 
-### Run Agent
-```http
-POST /run_sse
-Content-Type: application/json
+#### `GET /user-medical-reports/{user_id}`
+Retrieve all previously analyzed medical reports for a user.
+
+**Response (200):**
+```json
+{
+    "success": true,
+    "user_id": "user_123",
+    "count": 2,
+    "reports": [
+        {
+            "report_id": "RPT_a1b2c3d4e5f6",
+            "report_type": "blood_test",
+            "severity_level": "ATTENTION",
+            "scanned_at": "2025-01-15T10:30:00",
+            "lab_values": {...},
+            "health_summary": "..."
+        }
+    ]
+}
 ```
+
+**cURL:**
+```bash
+curl http://localhost:8080/user-medical-reports/user_123
+```
+
+---
+
+### 🤖 Agent
+
+#### `POST /run_sse`
+Send a message to the SenioCare AI agent and receive a response.
 
 **Request Body:**
 ```json
@@ -341,7 +334,7 @@ Content-Type: application/json
     "session_id": "session_abc",
     "new_message": {
         "role": "user",
-        "parts": [{"text": "User message in Arabic"}]
+        "parts": [{"text": "مرحبا، عايز اعرف وجبات مناسبة ليا"}]
     },
     "streaming": false
 }
@@ -349,151 +342,67 @@ Content-Type: application/json
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| app_name | string | Yes | Always `"seniocare"` |
-| user_id | string | Yes | User identifier (must match `/set-user-profile`) |
-| session_id | string | Yes | Conversation session ID |
-| new_message.role | string | Yes | Always `"user"` |
-| new_message.parts | array | Yes | Array with `{"text": "..."}` |
-| streaming | boolean | No | `true` for SSE streaming |
+| `app_name` | string | ✅ | Always `"seniocare"` |
+| `user_id` | string | ✅ | User's unique ID |
+| `session_id` | string | ✅ | Session ID (from Create Session) |
+| `new_message` | object | ✅ | Message with `role` and `parts` |
+| `streaming` | boolean | ❌ | `false` = single JSON, `true` = SSE stream |
 
-**Response (streaming: false):**
-```json
-{
-    "events": [
-        {
-            "type": "agent_response",
-            "content": "يا هلا! ..."
-        }
-    ]
-}
+**cURL:**
+```bash
+curl -X POST http://localhost:8080/run_sse \
+  -H "Content-Type: application/json" \
+  -d '{"app_name":"seniocare","user_id":"user_123","session_id":"sess_1","new_message":{"role":"user","parts":[{"text":"مرحبا"}]},"streaming":false}'
 ```
 
 ---
 
-### Analyze Image (Vision AI)
-```http
-POST /analyze-image
-Content-Type: application/json
+### 📋 Sessions
+
+#### `POST /apps/seniocare/users/{user_id}/sessions/{session_id}`
+Create a new conversation session. **Must be called before `/run_sse`.**
+
+**cURL:**
+```bash
+curl -X POST http://localhost:8080/apps/seniocare/users/user_123/sessions/session_abc \
+  -H "Content-Type: application/json" -d '{}'
 ```
 
-**Request Body:**
-```json
-{
-    "user_id": "user_123",
-    "session_id": "session_abc",
-    "image_type": "medication",
-    "image_base64": "base64_encoded_image_data..."
-}
-```
+#### `GET /apps/seniocare/users/{user_id}/sessions/{session_id}`
+Get session info and state.
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| user_id | string | Yes | User identifier |
-| session_id | string | Yes | Session identifier |
-| image_type | string | Yes | `"medication"` or `"medical_report"` |
-| image_base64 | string | Yes | Base64 encoded image |
+#### `GET /apps/seniocare/users/{user_id}/sessions`
+List all sessions for a user.
 
-> **Note:** Requires `llama3.2-vision` model. Run `ollama pull llama3.2-vision` if not installed.
+#### `DELETE /apps/seniocare/users/{user_id}/sessions/{session_id}`
+Delete a specific session.
 
 ---
 
-## Backend Integration Guide
+## Error Handling
 
-### Complete Flow: User Registration → First Chat
+All endpoints return HTTP 200 with a `success` field in the response body. Non-200 errors are thrown as FastAPI HTTPException:
 
-```
-1. User registers in Flutter app
-   ↓
-2. Backend saves user data to Firebase/main DB
-   ↓
-3. Backend calls: POST /set-user-profile/{user_id}
-   Body: { user_name, age, conditions, allergies, medications, mobility }
-   → Profile persisted in sessions.db with user: prefix
-   ↓
-4. User opens chat tab
-   ↓
-5. Backend generates UUID for session_id
-   Backend calls: POST /apps/seniocare/users/{user_id}/sessions/{session_id}
-   → New session created (user: profile auto-loaded)
-   ↓
-6. User sends message
-   ↓
-7. Backend calls: POST /run_sse
-   Body: { app_name: "seniocare", user_id, session_id, new_message }
-   → Agent has full access to user profile + chat history
-   ↓
-8. Agent responds with personalized recommendation
-```
-
-### Complete Flow: User Opens New Chat Tab
-
-```
-1. User taps "New Chat" in Flutter app
-   ↓
-2. Backend generates NEW session_id (UUID)
-   Backend calls: POST /apps/seniocare/users/{user_id}/sessions/{new_session_id}
-   → New session created
-   → User profile (user: prefix) automatically available (same user_id)
-   → Previous chat history NOT available (different session)
-   → Long-term memory can recall past conversations
-   ↓
-3. User sends message → POST /run_sse → Agent responds
-```
-
-### Complete Flow: Profile Update (Doctor Changes Medication)
-
-```
-1. Doctor changes patient's medication in the backend
-   ↓
-2. Backend detects change, calls:
-   POST /sync-user-profile/{user_id}
-   Body: { "medications": [{"name": "Amlodipine", "dose": "5mg"}] }
-   → Only medications updated, other fields unchanged
-   ↓
-3. Next time user sends a message in ANY session:
-   → Agent automatically uses updated medications
-   → Drug interaction checks use new medications
-```
-
-### Complete Flow: Resuming a Past Conversation
-
-```
-1. User selects past chat from history screen
-   ↓
-2. Backend calls: GET /apps/seniocare/users/{user_id}/sessions
-   → Gets list of all sessions with timestamps
-   ↓
-3. User selects a session
-   ↓
-4. Backend calls: GET /apps/seniocare/users/{user_id}/sessions/{session_id}
-   → Gets full chat history (events) and session state
-   ↓
-5. Frontend displays chat history
-   ↓
-6. User sends new message in the SAME session
-   → POST /run_sse with the SAME session_id
-   → Agent has access to full previous conversation context
-```
+| Status | Meaning |
+|--------|---------|
+| 200 | Success (check `success` field in body) |
+| 422 | Validation error (missing/invalid fields) |
+| 500 | Server error (check `detail` field) |
 
 ---
 
-## What the Backend Needs to Store
+## Required Ollama Models
 
-| Data | Where | Purpose |
-|------|-------|---------|
-| `user_id` | Backend DB | Primary key for user |
-| `session_id` (current) | Backend memory/DB | Track active conversation |
-| `session_id` (list) | Backend DB or call `GET /sessions` | Chat history screen |
-| `profile_synced` flag | Backend DB | Track if profile was sent to AI service |
+These models must be installed locally via Ollama for full functionality:
 
-The backend does NOT need to store:
-- Chat messages (stored in `sessions.db` by ADK)
-- User profile for AI (stored in `sessions.db` with `user:` prefix)
-- Agent responses (stored as events in `sessions.db`)
+```bash
+ollama pull llama3.1:8b                   # Chat & Agent responses
+ollama pull richardyoung/olmocr2:7b-q8    # Medication image OCR
+ollama pull llama3.2-vision               # Medical report analysis
+```
 
----
+**Endpoints that work WITHOUT Ollama:**
+`/health`, `/set-user-profile`, `/get-user-profile`, `/sync-user-profile`, `/user-medical-reports`, `/list-apps`, `/export-openapi`, all session endpoints.
 
-## Web UI Testing
-
-Visit http://localhost:8080 in browser for interactive testing via ADK web UI.
-When using `adk web`, test user data is auto-populated (no `/set-user-profile` needed).
+**Endpoints that REQUIRE Ollama:**
+`/run_sse`, `/analyze-medication-image`, `/analyze-medical-report`

@@ -98,13 +98,18 @@ TEST_USER_PROFILE = {
     "user:user_id": "user_001",
     "user:user_name": "Ahmed",
     "user:age": 72,
-    "user:conditions": ["diabetes", "hypertension"],
+    "user:weight": 78.0,
+    "user:height": 170.0,
+    "user:gender": "male",
+    "user:chronicDiseases": ["diabetes", "hypertension"],
     "user:allergies": ["shellfish"],
     "user:medications": [
         {"name": "Metformin", "dose": "500mg"},
         {"name": "Lisinopril", "dose": "10mg"},
     ],
-    "user:mobility": "limited",
+    "user:mobilityStatus": "limited",
+    "user:bloodType": "A+",
+    "user:caregiver_ids": [],
 }
 
 
@@ -123,7 +128,7 @@ async def populate_user_data(callback_context):
         for key, value in TEST_USER_PROFILE.items():
             state[key] = value
         print(f"[SenioCare] Test user loaded: {TEST_USER_PROFILE['user:user_name']} "
-              f"(conditions: {TEST_USER_PROFILE['user:conditions']}, "
+              f"(chronicDiseases: {TEST_USER_PROFILE['user:chronicDiseases']}, "
               f"medications: {[m['name'] for m in TEST_USER_PROFILE['user:medications']]})")
 
     # Track conversation turns (session-scoped, resets per session)

@@ -96,7 +96,7 @@ SECTION 4: AVAILABLE TOOLS
 
 You have access to these tools. Call them as directed by the TASK_PLAN:
 
-NOTE: User profile data (conditions, allergies, medications, mobility level)
+NOTE: User profile data (chronicDiseases, allergies, medications, mobilityStatus)
 is automatically available to tools via the session state. You do NOT need
 to pass these as parameters — tools read them from state directly.
 
@@ -104,7 +104,7 @@ TOOL: get_meal_options
   Parameters: meal_type (str) — "breakfast", "lunch", "dinner", "snack"
   Returns: Up to 3 compact meals with meal_id, name_ar, category, ingredients,
            nutrition (energy, protein, fat, carbs, sodium, sugar), notes_ar
-  Auto-filters by: user's conditions and allergies from state
+  Auto-filters by: user's chronicDiseases and allergies from state
 
 TOOL: get_meal_recipe
   Parameters: meal_id (str) — e.g. "M005"
@@ -129,7 +129,7 @@ TOOL: log_medication_intake
   Returns: Confirmation of logged intake with timestamp
 
 TOOL: get_exercises
-  Parameters: none (reads mobility_level, conditions from state)
+  Parameters: none (reads mobilityStatus, chronicDiseases from state)
   Returns: Up to 2 safe exercises with Arabic names, steps, benefits, safety
 
 TOOL: search_youtube
