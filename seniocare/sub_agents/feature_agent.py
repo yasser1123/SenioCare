@@ -12,12 +12,12 @@ to the Formatter without calling any tools.
 from google.adk.agents import LlmAgent
 from google.adk.models.lite_llm import LiteLlm
 from seniocare.tools.nutrition import get_meal_options, get_meal_recipe
-from seniocare.tools.medication import get_medication_schedule, log_medication_intake
 from seniocare.tools.exercise import get_exercises
 from seniocare.tools.interactions import check_drug_food_interaction
 from seniocare.tools.symptoms import assess_symptoms
 from seniocare.tools.web_search import search_medical_info, search_web, search_youtube
 from seniocare.tools.image_tools import analyze_medication_image_tool, analyze_medical_report_tool
+from seniocare.tools.preferences import save_user_preference
 
 FEATURE_INSTRUCTION = """
 ================================================================================
@@ -120,17 +120,16 @@ TOOL: assess_symptoms
   Parameters: symptoms (list) — e.g. ["severe headache", "dizziness"]
   Returns: Top 3 disease matches with severity, confidence, precautions
 
-TOOL: get_medication_schedule
-  Parameters: none (reads user_id from state)
-  Returns: All medications with doses, schedules, purposes, instructions
-
-TOOL: log_medication_intake
-  Parameters: medication_name (str) — e.g. "Metformin"
-  Returns: Confirmation of logged intake with timestamp
-
 TOOL: get_exercises
   Parameters: none (reads mobilityStatus, chronicDiseases from state)
   Returns: Up to 2 safe exercises with Arabic names, steps, benefits, safety
+
+TOOL: save_user_preference
+  Parameters: preference_type (str) — "food", "exercise", or "general"
+              items (list) — e.g. ["meat", "chicken"]
+              is_positive (bool) — True=likes, False=dislikes
+  Returns: Confirmation with updated preferences
+  Use when: User expresses a like/dislike for food, exercise, or activity
 
 TOOL: search_youtube
   Parameters: query (str), num_results (int), video_duration (str)
@@ -195,16 +194,18 @@ For each intent, follow this workflow:
 └─────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  MEDICATION INTENT — 1 tool:                                                │
-│  1. Call get_medication_schedule() → get full schedule                      │
-│  2. If user says they took medicine → also call log_medication_intake()    │
-│  3. Package: schedule + next doses + instructions                          │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────────┐
 │  MEDICAL Q&A INTENT — 1 tool:                                               │
 │  1. Call search_medical_info(query) → get trusted medical info             │
 │  2. Package: key information + sources + disclaimer                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  PREFERENCE INTENT — 1 tool:                                                │
+│  1. Call save_user_preference(type, items, is_positive)                    │
+│  2. Set RESPONSE_TYPE to "preference_saved"                                │
+│  3. Package: confirmation + updated preferences summary                    │
+│  NOTE: If combined with another intent, save preference FIRST             │
+│        then proceed with the other intent's workflow                        │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -230,7 +231,7 @@ SECTION 6: OUTPUT FORMAT
 
 FOR ALLOWED RESPONSES (after calling tools and making decisions):
 ---
-RESPONSE_TYPE: [meal_recommendation / exercise_plan / symptom_alert / medication_info / medical_info / emotional_support]
+RESPONSE_TYPE: [meal_recommendation / exercise_plan / symptom_alert / medical_info / emotional_support / preference_saved]
 
 USER_CONTEXT: [Copy from Orchestrator — do NOT abbreviate]
 
@@ -314,14 +315,13 @@ feature_agent = LlmAgent(
         get_meal_recipe,
         check_drug_food_interaction,
         assess_symptoms,
-        get_medication_schedule,
-        log_medication_intake,
         get_exercises,
         search_medical_info,
         search_web,
         search_youtube,
         analyze_medication_image_tool,
         analyze_medical_report_tool,
+        save_user_preference,
     ],
     output_key="feature_result",
 )

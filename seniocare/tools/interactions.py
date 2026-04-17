@@ -64,7 +64,7 @@ def check_drug_food_interaction(food_names: list, tool_context: ToolContext) -> 
             for food in food_names_lower:
                 cursor.execute("""
                     SELECT * FROM drug_food_interactions
-                    WHERE LOWER(drug_name) = ? AND LOWER(food_name) = ?
+                    WHERE LOWER(drug_name) = %s AND LOWER(food_name) = %s
                 """, (drug, food))
 
                 rows = cursor.fetchall()

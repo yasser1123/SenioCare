@@ -12,12 +12,15 @@ Endpoints provided by ADK:
 - POST /run_sse                                      - Run agent with message
 
 Custom endpoints added by SenioCare:
+- POST /create-session                              - Auto-generate session ID
+- GET  /chat-history/{user_id}                      - List conversations with headlines
+- GET  /chat-history/{user_id}/{session_id}         - Get full conversation turns
 - POST /set-user-profile/{user_id}                  - Push user profile data
 - GET  /get-user-profile/{user_id}                  - Get user profile data
 - POST /sync-user-profile/{user_id}                 - Sync updated profile
-- POST /analyze-medication-image                 - Analyze medication images (OCR)
-- POST /analyze-medical-report                    - Analyze medical report images
-- GET  /user-medical-reports/{user_id}            - Get user's report history
+- POST /analyze-medication-image                    - Analyze medication images (OCR)
+- POST /analyze-medical-report                      - Analyze medical report images
+- GET  /user-medical-reports/{user_id}              - Get user's report history
 - GET  /health                                       - Health check
 
 Usage:
@@ -27,11 +30,17 @@ Usage:
 import os
 import sys
 import json
+import uuid
 import warnings
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import RedirectResponse
 from google.adk.cli.fast_api import get_fast_api_app
+from google.adk.sessions import DatabaseSessionService
+from dotenv import load_dotenv
+
+# Load root .env for cloud database configuration
+load_dotenv(override=True)
 
 # Suppress Pydantic schema generation warnings from ADK internals
 warnings.filterwarnings("ignore", message=".*Unable to generate pydantic-core schema.*")
@@ -44,11 +53,29 @@ warnings.filterwarnings("ignore", message=".*EXPERIMENTAL.*")
 # Directory containing agent packages (seniocare/)
 AGENT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Session storage - SQLite with async driver (persistent across restarts)
-SESSION_DB = "sqlite+aiosqlite:////tmp/sessions.db" if os.environ.get("VERCEL") else "sqlite+aiosqlite:///./sessions.db"
+# Cloud Database (Neon PostgreSQL)
+# ADK's DatabaseSessionService requires the +asyncpg driver prefix.
+# asyncpg does NOT support sslmode/channel_binding as URL params — strip them.
+_raw_session_url = os.environ.get("SESSION_DB_URL", "")
+if _raw_session_url.startswith("postgresql://"):
+    from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+    _parsed = urlparse(_raw_session_url)
+    # Remove params asyncpg can't handle
+    _clean_params = {k: v[0] for k, v in parse_qs(_parsed.query).items()
+                     if k not in ("sslmode", "channel_binding")}
+    _clean_query = urlencode(_clean_params) if _clean_params else ""
+    _clean_url = urlunparse(_parsed._replace(
+        scheme="postgresql+asyncpg",
+        query=_clean_query,
+    ))
+    SESSION_DB = _clean_url
+else:
+    SESSION_DB = _raw_session_url or "sqlite+aiosqlite:///./sessions.db"
 
-# Memory service - None = InMemoryMemoryService (default, lost on restart)
-# For production, use Vertex AI Memory Bank or custom persistent solution
+# Memory service - ADK only supports Vertex AI Memory Bank URIs, NOT PostgreSQL.
+# Using InMemoryMemoryService (default). Cross-session context is handled by
+# user:-prefixed state (persisted in the session DB) and conversation_history
+# built in the before_agent_callback, so this is not a limitation.
 MEMORY_SERVICE_URI = None
 
 # CORS Configuration - Add your backend origins here
@@ -64,6 +91,14 @@ ALLOWED_ORIGINS = [
 
 # Enable web UI for testing (set to False in production)
 SERVE_WEB_INTERFACE = True
+
+# =============================================================================
+# MODULE-LEVEL SESSION SERVICE (single connection pool)
+# =============================================================================
+# This is the ONLY session service instance used by custom endpoints.
+# It shares the same DB as the ADK app, avoiding wasteful duplicate connections.
+
+_session_service = DatabaseSessionService(db_url=SESSION_DB)
 
 # =============================================================================
 # FASTAPI APP (ADK-powered)
@@ -94,7 +129,10 @@ def custom_openapi():
 
     # Paths we manage ourselves
     CUSTOM_PATHS = {
-        "/health", "/list-apps", "/api-docs", "/export-openapi",
+        "/health", "/list-apps",
+        "/create-session",
+        "/chat-history/{user_id}",
+        "/chat-history/{user_id}/{session_id}",
         "/set-user-profile/{user_id}",
         "/get-user-profile/{user_id}",
         "/sync-user-profile/{user_id}",
@@ -152,8 +190,8 @@ def custom_openapi():
         },
         "/apps/{app_name}/users/{user_id}/sessions/{session_id}": {
             "post": {
-                "tags": ["Sessions"], "summary": "Create Session",
-                "description": "Create a new conversation session. Must be called before /run_sse.",
+                "tags": ["Sessions"], "summary": "Create Session (ADK)",
+                "description": "Create a new conversation session via ADK. Prefer using POST /create-session instead (auto-generates session ID).",
                 "parameters": [
                     {"name": "app_name", "in": "path", "required": True, "schema": {"type": "string", "example": "seniocare"}},
                     {"name": "user_id", "in": "path", "required": True, "schema": {"type": "string", "example": "user_123"}},
@@ -202,25 +240,16 @@ def custom_openapi():
     try:
         schema = get_openapi(
             title="SenioCare AI Agent API",
-            version="2.0.0",
+            version="3.0.0",
             description=(
                 "AI-powered healthcare assistant API for elderly care.\n\n"
-                "## Integration Guide\n"
-                "1. **Set user profile** via `/set-user-profile/{user_id}` after registration\n"
-                "2. **Create a session** via `POST /apps/seniocare/users/{user_id}/sessions/{session_id}`\n"
-                "3. **Send messages** via `POST /run_sse` with the session ID\n"
-                "4. **Image analysis** \u2014 upload medication or report images for AI extraction\n\n"
-                "## Models Required (Ollama)\n"
-                "- Chat: `llama3.1:8b`\n"
-                "- Medication OCR: `richardyoung/olmocr2:7b-q8`\n"
-                "- Report Analysis: `llama3.2-vision`\n"
-            ),
+               ),
             routes=safe_routes,
         )
     except Exception:
         schema = {
             "openapi": "3.1.0",
-            "info": {"title": "SenioCare AI Agent API", "version": "2.0.0"},
+            "info": {"title": "SenioCare AI Agent API", "version": "3.0.0"},
             "paths": {},
         }
 
@@ -231,10 +260,11 @@ def custom_openapi():
     # Tag ordering for nice display
     schema["tags"] = [
         {"name": "Health", "description": "Service health and discovery"},
+        {"name": "Sessions", "description": "Conversation session management"},
+        {"name": "Chat History", "description": "Conversation history with headlines"},
         {"name": "User Profile", "description": "Push/pull user health profile data"},
         {"name": "Image Analysis", "description": "AI-powered medication and medical report image analysis"},
         {"name": "Agent", "description": "Send messages to the SenioCare AI agent"},
-        {"name": "Sessions", "description": "Conversation session management"},
     ]
 
     return schema
@@ -247,36 +277,186 @@ app.openapi = custom_openapi
 # CUSTOM ENDPOINTS
 # =============================================================================
 
-@app.get("/api-docs", tags=["Health"])
-async def custom_docs():
-    """
-    Redirect to the interactive Swagger UI documentation.
-    """
-    return RedirectResponse(url="/docs")
-
-
-@app.get("/export-openapi", tags=["Health"])
-async def export_openapi():
-    """
-    Export the OpenAPI spec as downloadable JSON.
-
-    Use this to host static Swagger UI docs without deploying the server.
-    Save the output to a file and upload to GitHub Pages or SwaggerHub.
-    """
-    from fastapi.responses import JSONResponse
-    return JSONResponse(content=app.openapi(), media_type="application/json")
-
 @app.get("/health", tags=["Health"])
 async def health_check():
     """Health check endpoint for monitoring and uptime checks."""
+    db_type = "Neon PostgreSQL" if "neon" in SESSION_DB else SESSION_DB.split("://")[0]
+    memory_type = "PostgreSQL" if MEMORY_SERVICE_URI and "neon" in MEMORY_SERVICE_URI else "InMemory"
     return {
         "status": "healthy",
         "service": "seniocare-api",
-        "version": "2.0.0",
-        "session_db": SESSION_DB,
-        "memory_service": "InMemoryMemoryService",
+        "version": "3.0.0",
+        "session_db": db_type,
+        "memory_service": memory_type,
         "docs": "/docs",
     }
+
+# =============================================================================
+# SESSION MANAGEMENT ENDPOINTS
+# =============================================================================
+
+from pydantic import BaseModel
+from typing import Optional, List
+
+
+class CreateSessionRequest(BaseModel):
+    """Request model for creating a new conversation session."""
+    user_id: str  # The user's unique identifier
+
+
+class CreateSessionResponse(BaseModel):
+    """Response model for session creation."""
+    success: bool
+    session_id: str
+    user_id: str
+    app_name: str = "seniocare"
+
+
+@app.post("/create-session", tags=["Sessions"])
+async def create_session(request: CreateSessionRequest):
+    """
+    Create a new conversation session with auto-generated session ID.
+
+    Call this endpoint before starting a new conversation. The server
+    generates a unique session_id and returns it in the response body.
+    Use this session_id in subsequent /run_sse calls.
+
+    Args:
+        request: Contains only user_id — the session ID is auto-generated.
+
+    Returns:
+        CreateSessionResponse with the generated session_id.
+    """
+    try:
+        session_id = uuid.uuid4().hex
+
+        session = await _session_service.create_session(
+            app_name="seniocare",
+            user_id=request.user_id,
+            session_id=session_id,
+        )
+
+        return CreateSessionResponse(
+            success=True,
+            session_id=session_id,
+            user_id=request.user_id,
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create session: {str(e)}")
+
+
+# =============================================================================
+# CHAT HISTORY ENDPOINTS
+# =============================================================================
+
+@app.get("/chat-history/{user_id}", tags=["Chat History"])
+async def get_chat_history(user_id: str):
+    """
+    List all conversations for a user with headlines and previews.
+
+    Returns a lightweight list of sessions — no full event logs loaded.
+    Headlines and previews are stored in session state during the first
+    turn, so this endpoint only reads state metadata.
+
+    Args:
+        user_id: The user's unique identifier.
+
+    Returns:
+        List of conversations with session_id, headline, preview, and turn count.
+    """
+    try:
+        sessions = await _session_service.list_sessions(
+            app_name="seniocare",
+            user_id=user_id,
+        )
+
+        conversations = []
+        for session in sessions:
+            # Skip internal/temporary sessions
+            if session.id.startswith("_profile_"):
+                continue
+
+            conversations.append({
+                "session_id": session.id,
+                "headline": session.state.get("session_headline", "💬 محادثة جديدة"),
+                "preview": session.state.get("session_preview", ""),
+                "turn_count": session.state.get("conversation_turn_count", 0),
+            })
+
+        return {
+            "success": True,
+            "user_id": user_id,
+            "count": len(conversations),
+            "conversations": conversations,
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get chat history: {str(e)}")
+
+
+@app.get("/chat-history/{user_id}/{session_id}", tags=["Chat History"])
+async def get_conversation_turns(user_id: str, session_id: str):
+    """
+    Get the full conversation turns for a specific session.
+
+    Loads the session's event log and returns each user/agent exchange
+    as a structured turn object.
+
+    Args:
+        user_id: The user's unique identifier.
+        session_id: The session ID to retrieve turns for.
+
+    Returns:
+        Session headline + ordered list of turns with role, text, and timestamp.
+    """
+    try:
+        session = await _session_service.get_session(
+            app_name="seniocare",
+            user_id=user_id,
+            session_id=session_id,
+        )
+
+        if session is None:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+        turns = []
+        for event in session.events:
+            if not hasattr(event, 'content') or not event.content:
+                continue
+            if not event.content.parts:
+                continue
+
+            text = event.content.parts[0].text or ""
+            if not text.strip():
+                continue
+
+            # Only include user messages and final formatter output
+            if event.author == "user":
+                turns.append({
+                    "role": "user",
+                    "text": text,
+                    "timestamp": str(event.timestamp) if hasattr(event, 'timestamp') else None,
+                })
+            elif event.author == "formatter_agent":
+                turns.append({
+                    "role": "agent",
+                    "text": text,
+                    "timestamp": str(event.timestamp) if hasattr(event, 'timestamp') else None,
+                })
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "headline": session.state.get("session_headline", "💬 محادثة جديدة"),
+            "turn_count": len([t for t in turns if t["role"] == "user"]),
+            "turns": turns,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get conversation: {str(e)}")
 
 
 # =============================================================================
@@ -285,8 +465,6 @@ async def health_check():
 # These endpoints allow the backend to push/pull user profile data.
 # Data is stored in session state with user: prefix for cross-session persistence.
 
-from pydantic import BaseModel
-from typing import Optional, List
 
 class MedicationItem(BaseModel):
     """A single medication entry."""
@@ -341,29 +519,12 @@ async def set_user_profile(user_id: str, profile: UserProfileRequest):
         user_id: The user's unique identifier (from Firebase, etc.)
         profile: The user's health profile data
     """
-    from google.adk.sessions import DatabaseSessionService
-    import uuid
-
-    # Access the session service from the ADK app internals
-    # We need to create/get a session for this user to write state
     try:
-        # Get the session service that ADK is using
-        session_service = None
-        for attr_name in dir(app):
-            obj = getattr(app, attr_name, None)
-            if isinstance(obj, DatabaseSessionService):
-                session_service = obj
-                break
-
-        if session_service is None:
-            # Fallback: create our own session service with the same DB
-            session_service = DatabaseSessionService(db_url=SESSION_DB)
-
         # Create a temporary session to write user-scoped state
         # ADK will automatically persist user:-prefixed keys for this user_id
         temp_session_id = f"_profile_setup_{uuid.uuid4().hex[:8]}"
 
-        session = await session_service.create_session(
+        session = await _session_service.create_session(
             app_name="seniocare",
             user_id=user_id,
             session_id=temp_session_id,
@@ -384,7 +545,7 @@ async def set_user_profile(user_id: str, profile: UserProfileRequest):
         )
 
         # Clean up the temporary session (the user:-scoped state persists)
-        await session_service.delete_session(
+        await _session_service.delete_session(
             app_name="seniocare",
             user_id=user_id,
             session_id=temp_session_id,
@@ -417,23 +578,10 @@ async def get_user_profile(user_id: str):
     Args:
         user_id: The user's unique identifier
     """
-    from google.adk.sessions import DatabaseSessionService
-    import uuid
-
     try:
-        session_service = None
-        for attr_name in dir(app):
-            obj = getattr(app, attr_name, None)
-            if isinstance(obj, DatabaseSessionService):
-                session_service = obj
-                break
-
-        if session_service is None:
-            session_service = DatabaseSessionService(db_url=SESSION_DB)
-
         # Create a temporary session to read user-scoped state
         temp_session_id = f"_profile_read_{uuid.uuid4().hex[:8]}"
-        session = await session_service.create_session(
+        session = await _session_service.create_session(
             app_name="seniocare",
             user_id=user_id,
             session_id=temp_session_id,
@@ -453,10 +601,11 @@ async def get_user_profile(user_id: str):
             "mobilityStatus": session.state.get("user:mobilityStatus"),
             "bloodType": session.state.get("user:bloodType"),
             "caregiver_ids": session.state.get("user:caregiver_ids"),
+            "preferences": session.state.get("user:preferences"),
         }
 
         # Clean up temporary session
-        await session_service.delete_session(
+        await _session_service.delete_session(
             app_name="seniocare",
             user_id=user_id,
             session_id=temp_session_id,
@@ -492,20 +641,7 @@ async def sync_user_profile(user_id: str, updates: PartialProfileUpdate):
         user_id: The user's unique identifier
         updates: Only the fields that changed (others remain unchanged)
     """
-    from google.adk.sessions import DatabaseSessionService
-    import uuid
-
     try:
-        session_service = None
-        for attr_name in dir(app):
-            obj = getattr(app, attr_name, None)
-            if isinstance(obj, DatabaseSessionService):
-                session_service = obj
-                break
-
-        if session_service is None:
-            session_service = DatabaseSessionService(db_url=SESSION_DB)
-
         # Build state update dict with only provided fields
         state_updates = {}
         if updates.user_name is not None:
@@ -539,7 +675,7 @@ async def sync_user_profile(user_id: str, updates: PartialProfileUpdate):
 
         # Create a temporary session with the updated state
         temp_session_id = f"_profile_sync_{uuid.uuid4().hex[:8]}"
-        session = await session_service.create_session(
+        session = await _session_service.create_session(
             app_name="seniocare",
             user_id=user_id,
             session_id=temp_session_id,
@@ -547,7 +683,7 @@ async def sync_user_profile(user_id: str, updates: PartialProfileUpdate):
         )
 
         # Clean up temporary session
-        await session_service.delete_session(
+        await _session_service.delete_session(
             app_name="seniocare",
             user_id=user_id,
             session_id=temp_session_id,
@@ -677,30 +813,35 @@ if __name__ == "__main__":
         except (IndexError, ValueError):
             pass
 
+    db_label = "Neon PostgreSQL" if "neon" in SESSION_DB else SESSION_DB.split("://")[0]
+    mem_label = "PostgreSQL" if MEMORY_SERVICE_URI and "neon" in str(MEMORY_SERVICE_URI) else "InMemory"
+
     print(f"""
-╔══════════════════════════════════════════════════════════════╗
-║                    SenioCare API Server v2.0                 ║
-╠══════════════════════════════════════════════════════════════╣
-║  Running on: http://localhost:{port:<5}                      ║
-║                                                              ║
-║  ADK Endpoints:                                              ║
-║    GET  /list-apps           - List agents                   ║
-║    POST /run_sse             - Run agent                     ║
-║    POST /apps/seniocare/...  - Session management            ║
-║                                                              ║
-║  Custom Endpoints:                                           ║
-║    POST /set-user-profile    - Push user profile             ║
-║    GET  /get-user-profile    - Get user profile              ║
-║    POST /sync-user-profile   - Sync profile changes          ║
-║    POST /analyze-medication-image - Medication OCR (olmocr2) ║
-║    POST /analyze-medical-report   - Report analysis (llama3.2)║
-║    GET  /user-medical-reports     - Report history           ║
-║    GET  /health              - Health check                  ║
-║                                                              ║
-║  Session DB: {SESSION_DB:<30}                                ║
-║  Memory:     InMemoryMemoryService (dev)                     ║
-║  Web UI:     http://localhost:{port:<5}                      ║
-╚══════════════════════════════════════════════════════════════╝
+==============================================================
+                    SenioCare API Server v3.0
+==============================================================
+  Running on: http://localhost:{port}
+
+  ADK Endpoints:
+    GET  /list-apps           - List agents
+    POST /run_sse             - Run agent
+    POST /apps/seniocare/...  - Session management
+
+  Custom Endpoints:
+    POST /create-session      - Create session (auto ID)
+    GET  /chat-history        - Conversation history
+    POST /set-user-profile    - Push user profile
+    GET  /get-user-profile    - Get user profile
+    POST /sync-user-profile   - Sync profile changes
+    POST /analyze-medication-image - Medication OCR (olmocr2)
+    POST /analyze-medical-report   - Report analysis (llama3.2)
+    GET  /user-medical-reports     - Report history
+    GET  /health              - Health check
+
+  Session DB: {db_label}
+  Memory:     {mem_label}
+  Web UI:     http://localhost:{port}
+==============================================================
     """)
 
     uvicorn.run(app, host="0.0.0.0", port=port)

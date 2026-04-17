@@ -277,11 +277,20 @@ def _store_report_in_db(
 
         cursor.execute(
             """
-            INSERT OR REPLACE INTO medical_reports
+            INSERT INTO medical_reports
             (report_id, user_id, report_type, report_date, key_findings,
              lab_values, health_summary, severity_level, recommendations,
              scanned_at, raw_response)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (report_id) DO UPDATE SET
+                report_type = EXCLUDED.report_type,
+                key_findings = EXCLUDED.key_findings,
+                lab_values = EXCLUDED.lab_values,
+                health_summary = EXCLUDED.health_summary,
+                severity_level = EXCLUDED.severity_level,
+                recommendations = EXCLUDED.recommendations,
+                scanned_at = EXCLUDED.scanned_at,
+                raw_response = EXCLUDED.raw_response
             """,
             (
                 report_id,
@@ -442,7 +451,7 @@ def get_user_reports(user_id: str) -> list[dict]:
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT * FROM medical_reports WHERE user_id = ? ORDER BY scanned_at DESC",
+            "SELECT * FROM medical_reports WHERE user_id = %s ORDER BY scanned_at DESC",
             (user_id,),
         )
         rows = cursor.fetchall()

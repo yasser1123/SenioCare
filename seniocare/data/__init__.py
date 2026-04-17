@@ -1,1 +1,1 @@
-"""Data package - SQLite test database for SenioCare tools."""
+"""Data package - Cloud PostgreSQL database for SenioCare tools."""

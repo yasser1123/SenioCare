@@ -36,7 +36,7 @@ def get_exercises(tool_context: ToolContext) -> dict:
     try:
         # Get exercises for the user's mobility level
         cursor.execute(
-            "SELECT * FROM exercises WHERE mobility_level = ?",
+            "SELECT * FROM exercises WHERE mobility_level = %s",
             (mobility_level.lower(),)
         )
         all_exercises = [dict(row) for row in cursor.fetchall()]

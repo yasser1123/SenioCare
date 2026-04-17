@@ -1,9 +1,8 @@
 """
-SQLite Test Database for SenioCare Tools.
+Cloud PostgreSQL Database for SenioCare Tools.
 
-Creates and manages a test database with sample data derived from
+Creates and manages tables on Neon PostgreSQL with sample data derived from
 the real dataset schemas (DDID, USDA, Various Datasets).
-This is for testing AI agent tool-calling behavior.
 
 Tables:
     - meals: Food items with nutritional info
@@ -12,54 +11,70 @@ Tables:
     - disease_symptoms: Disease-to-symptom mappings with severity
     - disease_precautions: Precautionary measures per disease
     - food_allergens: Food-to-allergen category mappings
-    - medications: User medication schedules
     - exercises: Exercise recommendations by mobility level
     - medical_reports: Analyzed medical report results (from image analysis)
 """
 
-import sqlite3
 import json
 import os
 
-# Database file path
-DB_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(DB_DIR, "seniocare_test.db")
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from dotenv import load_dotenv
+
+# Load environment from root .env
+_project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+load_dotenv(os.path.join(_project_root, ".env"))
+
+DATABASE_URL = os.environ.get("APP_DATABASE_URL", "")
+if not DATABASE_URL:
+    raise RuntimeError(
+        "APP_DATABASE_URL is not set. Add it to the root .env file.\n"
+        "Example: APP_DATABASE_URL=postgresql://user:pass@host/db?sslmode=require"
+    )
+
+# Track whether tables have been initialized this process
+_initialized = False
 
 
-def get_connection() -> sqlite3.Connection:
-    """Get a connection to the test database. Creates it if it doesn't exist."""
-    if not os.path.exists(DB_PATH):
-        _initialize_database()
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row  # Return rows as dict-like objects
+def get_connection():
+    """Get a connection to the cloud PostgreSQL database."""
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     return conn
 
 
 def _initialize_database():
-    """Create all tables and populate with sample test data."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    """Create all tables and populate with sample data (idempotent)."""
+    global _initialized
+    if _initialized:
+        return
+
+    conn = psycopg2.connect(DATABASE_URL)
     cursor = conn.cursor()
 
-    # Enable WAL mode for better concurrent reads
-    cursor.execute("PRAGMA journal_mode=WAL")
+    try:
+        _create_tables(cursor)
+        _insert_sample_meals(cursor)
+        _insert_condition_rules(cursor)
+        _insert_drug_food_interactions(cursor)
+        _insert_disease_symptoms(cursor)
+        _insert_disease_precautions(cursor)
+        _insert_food_allergens(cursor)
+        _insert_exercises(cursor)
+        conn.commit()
+        _initialized = True
+        print("[SenioCare DB] Cloud database tables initialized successfully")
+    except Exception as e:
+        conn.rollback()
+        print(f"[SenioCare DB] Database initialization error: {e}")
+        raise
+    finally:
+        cursor.close()
+        conn.close()
 
-    _create_tables(cursor)
-    _insert_sample_meals(cursor)
-    _insert_condition_rules(cursor)
-    _insert_drug_food_interactions(cursor)
-    _insert_disease_symptoms(cursor)
-    _insert_disease_precautions(cursor)
-    _insert_food_allergens(cursor)
-    _insert_medications(cursor)
-    _insert_exercises(cursor)
 
-    conn.commit()
-    conn.close()
-
-
-def _create_tables(cursor: sqlite3.Cursor):
-    """Create all database tables."""
+def _create_tables(cursor):
+    """Create all database tables (PostgreSQL syntax)."""
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS meals (
@@ -119,40 +134,25 @@ def _create_tables(cursor: sqlite3.Cursor):
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS disease_precautions (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            id         SERIAL PRIMARY KEY,
             disease_id TEXT NOT NULL,
-            precaution TEXT NOT NULL,
-            FOREIGN KEY (disease_id) REFERENCES disease_symptoms(disease_id)
+            precaution TEXT NOT NULL
         )
     """)
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS food_allergens (
-            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            id        SERIAL PRIMARY KEY,
             food_name TEXT NOT NULL,
             allergen  TEXT NOT NULL
         )
     """)
 
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS medications (
-            med_id       TEXT PRIMARY KEY,
-            user_id      TEXT NOT NULL,
-            name         TEXT NOT NULL,
-            dose         TEXT NOT NULL,
-            schedule     TEXT NOT NULL,
-            purpose_ar   TEXT,
-            purpose_en   TEXT,
-            instructions_ar TEXT,
-            instructions_en TEXT
-        )
-    """)
-
-    cursor.execute("""
         CREATE TABLE IF NOT EXISTS exercises (
-            exercise_id   TEXT PRIMARY KEY,
-            name_ar       TEXT NOT NULL,
-            name_en       TEXT NOT NULL,
+            exercise_id    TEXT PRIMARY KEY,
+            name_ar        TEXT NOT NULL,
+            name_en        TEXT NOT NULL,
             mobility_level TEXT NOT NULL,
             exercise_type  TEXT NOT NULL,
             duration       TEXT,
@@ -187,13 +187,12 @@ def _create_tables(cursor: sqlite3.Cursor):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_drug_interactions_drug ON drug_food_interactions(drug_name)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_drug_interactions_food ON drug_food_interactions(food_name)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_allergens_allergen ON food_allergens(allergen)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_medications_user ON medications(user_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_exercises_mobility ON exercises(mobility_level)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_precautions_disease ON disease_precautions(disease_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_medical_reports_user ON medical_reports(user_id)")
 
 
-def _insert_sample_meals(cursor: sqlite3.Cursor):
+def _insert_sample_meals(cursor):
     """Insert sample meal data (Egyptian + general healthy meals) with full recipes."""
     meals = [
         # === BREAKFAST ===
@@ -334,16 +333,18 @@ def _insert_sample_meals(cursor: sqlite3.Cursor):
          "تحذير: الجريب فروت ممنوع مع بعض الأدوية - استشر طبيبك"),
     ]
 
-    cursor.executemany("""
-        INSERT OR IGNORE INTO meals 
-        (meal_id, name_ar, name_en, meal_type, category, ingredients,
-         energy_kcal, protein_g, fat_g, carbohydrate_g, fiber_g, sodium_mg, sugar_g,
-         prep_time, notes_ar, notes_en, recipe_steps, recipe_tips)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, meals)
+    for meal in meals:
+        cursor.execute("""
+            INSERT INTO meals
+            (meal_id, name_ar, name_en, meal_type, category, ingredients,
+             energy_kcal, protein_g, fat_g, carbohydrate_g, fiber_g, sodium_mg, sugar_g,
+             prep_time, notes_ar, notes_en, recipe_steps, recipe_tips)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (meal_id) DO NOTHING
+        """, meal)
 
 
-def _insert_condition_rules(cursor: sqlite3.Cursor):
+def _insert_condition_rules(cursor):
     """Insert dietary rules per health condition."""
     rules = [
         ("R001", "diabetes",
@@ -383,199 +384,166 @@ def _insert_condition_rules(cursor: sqlite3.Cursor):
          json.dumps({})),
     ]
 
-    cursor.executemany("""
-        INSERT OR IGNORE INTO condition_dietary_rules
-        (rule_id, condition, avoid_high, prefer_high, avoid_foods, max_values)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, rules)
+    for rule in rules:
+        cursor.execute("""
+            INSERT INTO condition_dietary_rules
+            (rule_id, condition, avoid_high, prefer_high, avoid_foods, max_values)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (rule_id) DO NOTHING
+        """, rule)
 
 
-def _insert_drug_food_interactions(cursor: sqlite3.Cursor):
+def _insert_drug_food_interactions(cursor):
     """Insert drug-food interaction records (from DDID patterns)."""
     interactions = [
         ("INT001", "metformin", "grapefruit", "negative", "moderate",
          "Grapefruit may affect metformin absorption and efficacy",
          "Avoid grapefruit and grapefruit juice while taking metformin"),
-
         ("INT002", "metformin", "alcohol", "negative", "severe",
          "Alcohol increases the risk of lactic acidosis with metformin",
          "Avoid alcohol consumption while taking metformin"),
-
         ("INT003", "lisinopril", "banana", "negative", "moderate",
          "Lisinopril increases potassium levels; bananas are high in potassium",
          "Limit high-potassium foods like bananas while taking lisinopril"),
-
         ("INT004", "lisinopril", "salt substitute", "negative", "severe",
          "Salt substitutes contain potassium which can cause dangerous hyperkalemia with ACE inhibitors",
          "Never use salt substitutes while taking lisinopril"),
-
         ("INT005", "warfarin", "spinach", "negative", "moderate",
          "Spinach is high in vitamin K which counteracts warfarin",
          "Maintain consistent vitamin K intake; avoid sudden increases in leafy greens"),
-
         ("INT006", "warfarin", "grapefruit", "negative", "moderate",
          "Grapefruit can increase warfarin levels and bleeding risk",
          "Avoid grapefruit while taking warfarin"),
-
         ("INT007", "warfarin", "garlic", "negative", "mild",
          "Garlic may increase the anticoagulant effect of warfarin",
          "Use garlic in moderation while on warfarin"),
-
         ("INT008", "simvastatin", "grapefruit", "negative", "severe",
          "Grapefruit significantly increases simvastatin levels causing muscle damage risk",
          "Completely avoid grapefruit and grapefruit juice with simvastatin"),
-
         ("INT009", "amlodipine", "grapefruit", "negative", "moderate",
          "Grapefruit may increase amlodipine blood levels",
          "Avoid grapefruit while taking amlodipine"),
-
         ("INT010", "metformin", "fiber", "positive", "mild",
          "High fiber foods help stabilize blood sugar alongside metformin",
          "Include high fiber foods in your diet"),
-
         ("INT011", "calcium", "spinach", "negative", "mild",
          "Oxalates in spinach can reduce calcium absorption",
          "Take calcium supplements separately from spinach-containing meals"),
-
         ("INT012", "levothyroxine", "coffee", "negative", "moderate",
          "Coffee can reduce levothyroxine absorption by up to 36%",
          "Take levothyroxine at least 30 minutes before coffee"),
-
         ("INT013", "ciprofloxacin", "milk", "negative", "moderate",
          "Dairy products reduce ciprofloxacin absorption",
          "Avoid dairy 2 hours before and after taking ciprofloxacin"),
-
         ("INT014", "aspirin", "alcohol", "negative", "severe",
          "Alcohol increases the risk of stomach bleeding with aspirin",
          "Avoid alcohol while taking aspirin"),
-
         ("INT015", "metformin", "carrot", "positive", "mild",
          "Carrots are low-glycemic and complement metformin therapy",
          "Carrots are a good food choice while on metformin"),
-
         ("INT016", "lisinopril", "fish", "positive", "mild",
          "Omega-3 in fish may complement blood pressure management",
          "Fish is a good dietary choice while on lisinopril"),
-
         ("INT017", "aspirin", "fish oil", "negative", "moderate",
          "Fish oil may increase bleeding risk when combined with aspirin",
          "Consult your doctor about fish oil supplements while on aspirin"),
-
         ("INT018", "metoprolol", "orange juice", "negative", "mild",
          "Orange juice may reduce metoprolol absorption",
          "Avoid orange juice close to metoprolol dosing time"),
-
         ("INT019", "diazepam", "grapefruit", "negative", "moderate",
          "Grapefruit increases diazepam levels causing excessive sedation",
          "Avoid grapefruit while taking diazepam"),
-
         ("INT020", "iron supplements", "coffee", "negative", "moderate",
          "Coffee tannins inhibit iron absorption by up to 60%",
          "Take iron supplements at least 1 hour before or 2 hours after coffee"),
     ]
 
-    cursor.executemany("""
-        INSERT OR IGNORE INTO drug_food_interactions
-        (interaction_id, drug_name, food_name, effect, severity, conclusion, advice)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, interactions)
+    for interaction in interactions:
+        cursor.execute("""
+            INSERT INTO drug_food_interactions
+            (interaction_id, drug_name, food_name, effect, severity, conclusion, advice)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (interaction_id) DO NOTHING
+        """, interaction)
 
 
-def _insert_disease_symptoms(cursor: sqlite3.Cursor):
+def _insert_disease_symptoms(cursor):
     """Insert disease-symptom mappings with severity classification."""
     diseases = [
-        # EMERGENCY severity
         ("DIS001", "stroke", json.dumps([
             "sudden severe headache", "face drooping", "arm weakness",
             "speech difficulty", "vision loss", "confusion", "dizziness",
             "loss of balance", "numbness"
         ]), "EMERGENCY",
          "A stroke occurs when blood supply to part of the brain is cut off"),
-
         ("DIS002", "heart attack", json.dumps([
             "chest pain", "chest pressure", "shortness of breath",
             "pain in left arm", "cold sweat", "nausea", "dizziness",
             "jaw pain", "fatigue"
         ]), "EMERGENCY",
          "A heart attack occurs when blood flow to the heart is blocked"),
-
         ("DIS003", "severe allergic reaction", json.dumps([
             "difficulty breathing", "swelling of throat", "swelling of face",
             "rapid heartbeat", "dizziness", "skin rash", "nausea",
             "low blood pressure"
         ]), "EMERGENCY",
          "Anaphylaxis is a severe, potentially life-threatening allergic reaction"),
-
-        # URGENT severity
         ("DIS004", "pneumonia", json.dumps([
             "high fever", "cough", "difficulty breathing", "chest pain",
             "fatigue", "confusion", "chills", "sweating"
         ]), "URGENT",
          "Pneumonia is an infection that inflames the air sacs in the lungs"),
-
         ("DIS005", "deep vein thrombosis", json.dumps([
             "leg swelling", "leg pain", "warmth in leg", "redness in leg",
             "cramping"
         ]), "URGENT",
          "DVT is a blood clot in a deep vein, usually in the leg"),
-
         ("DIS006", "urinary tract infection", json.dumps([
             "burning urination", "frequent urination", "cloudy urine",
             "fever", "lower abdominal pain", "blood in urine"
         ]), "URGENT",
          "UTI is an infection in any part of the urinary system"),
-
-        # MONITOR severity
         ("DIS007", "diabetes complications", json.dumps([
             "excessive thirst", "frequent urination", "blurry vision",
             "fatigue", "slow healing wounds", "tingling in hands",
             "tingling in feet", "weight loss"
         ]), "MONITOR",
          "Uncontrolled diabetes can lead to various complications"),
-
         ("DIS008", "hypertension crisis", json.dumps([
             "severe headache", "blurry vision", "dizziness", "nausea",
             "nosebleed", "shortness of breath", "chest pain"
         ]), "URGENT",
          "Hypertensive crisis occurs when blood pressure reaches dangerously high levels"),
-
         ("DIS009", "arthritis flare", json.dumps([
             "joint pain", "joint stiffness", "joint swelling", "reduced range of motion",
             "warmth around joint", "fatigue"
         ]), "MONITOR",
          "An arthritis flare is a period of increased disease activity"),
-
         ("DIS010", "gastroenteritis", json.dumps([
             "diarrhea", "nausea", "vomiting", "stomach cramps",
             "fever", "headache", "muscle aches"
         ]), "MONITOR",
          "Gastroenteritis is inflammation of the stomach and intestines"),
-
-        # NORMAL severity
         ("DIS011", "common cold", json.dumps([
             "runny nose", "sneezing", "sore throat", "mild cough",
             "mild headache", "mild fever", "body aches"
         ]), "NORMAL",
          "The common cold is a viral infection of the upper respiratory tract"),
-
         ("DIS012", "seasonal allergy", json.dumps([
             "sneezing", "runny nose", "itchy eyes", "watery eyes",
             "nasal congestion", "itchy throat"
         ]), "NORMAL",
          "Seasonal allergies are immune responses to outdoor allergens"),
-
         ("DIS013", "mild dehydration", json.dumps([
             "dry mouth", "thirst", "dark urine", "fatigue",
             "dizziness", "headache"
         ]), "MONITOR",
          "Dehydration occurs when you use or lose more fluid than you take in"),
-
         ("DIS014", "insomnia", json.dumps([
             "difficulty sleeping", "waking up at night", "fatigue",
             "irritability", "difficulty concentrating", "daytime sleepiness"
         ]), "NORMAL",
          "Insomnia is a sleep disorder where you have trouble falling or staying asleep"),
-
         ("DIS015", "constipation", json.dumps([
             "infrequent bowel movements", "hard stools", "straining",
             "abdominal bloating", "abdominal pain", "feeling of incomplete evacuation"
@@ -583,262 +551,161 @@ def _insert_disease_symptoms(cursor: sqlite3.Cursor):
          "Constipation is infrequent bowel movements or difficult passage of stools"),
     ]
 
-    cursor.executemany("""
-        INSERT OR IGNORE INTO disease_symptoms
-        (disease_id, disease_name, symptoms, severity, description)
-        VALUES (?, ?, ?, ?, ?)
-    """, diseases)
+    for disease in diseases:
+        cursor.execute("""
+            INSERT INTO disease_symptoms
+            (disease_id, disease_name, symptoms, severity, description)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (disease_id) DO NOTHING
+        """, disease)
 
 
-def _insert_disease_precautions(cursor: sqlite3.Cursor):
+def _insert_disease_precautions(cursor):
     """Insert precautionary measures per disease."""
     precautions = [
         ("DIS001", "Call emergency services (123) immediately"),
         ("DIS001", "Do not give the person anything to eat or drink"),
         ("DIS001", "Note the time symptoms started"),
         ("DIS001", "Keep the person lying down with head slightly elevated"),
-
         ("DIS002", "Call emergency services (123) immediately"),
         ("DIS002", "Have the person chew an aspirin if not allergic"),
         ("DIS002", "Keep the person calm and lying down"),
         ("DIS002", "Loosen any tight clothing"),
-
         ("DIS003", "Call emergency services (123) immediately"),
         ("DIS003", "Use epinephrine auto-injector if available"),
         ("DIS003", "Lay the person flat with legs elevated"),
-
         ("DIS004", "Seek medical attention promptly"),
         ("DIS004", "Rest and drink plenty of fluids"),
         ("DIS004", "Monitor temperature regularly"),
-
         ("DIS005", "Seek immediate medical attention"),
         ("DIS005", "Do not massage the affected leg"),
         ("DIS005", "Keep the leg elevated"),
-
         ("DIS006", "Consult a doctor for antibiotics"),
         ("DIS006", "Drink plenty of water"),
         ("DIS006", "Avoid caffeine and alcohol"),
-
         ("DIS007", "Check blood sugar levels immediately"),
         ("DIS007", "Take prescribed diabetes medication"),
         ("DIS007", "Consult your doctor about adjusting treatment"),
         ("DIS007", "Stay hydrated"),
-
         ("DIS008", "Seek medical attention immediately"),
         ("DIS008", "Take prescribed blood pressure medication"),
         ("DIS008", "Rest in a quiet place"),
         ("DIS008", "Avoid salt and stress"),
-
         ("DIS009", "Rest the affected joints"),
         ("DIS009", "Apply warm or cold compresses"),
         ("DIS009", "Take prescribed anti-inflammatory medication"),
-
         ("DIS010", "Stay hydrated with clear fluids"),
         ("DIS010", "Eat bland foods when able"),
         ("DIS010", "Rest and avoid dairy products"),
-
         ("DIS011", "Rest and drink plenty of fluids"),
         ("DIS011", "Use over-the-counter cold remedies if appropriate"),
         ("DIS011", "Wash hands frequently to prevent spread"),
-
         ("DIS012", "Avoid known allergens"),
         ("DIS012", "Use antihistamines as directed"),
         ("DIS012", "Keep windows closed during high pollen days"),
-
         ("DIS013", "Drink water frequently"),
         ("DIS013", "Avoid caffeine and alcohol"),
         ("DIS013", "Eat water-rich fruits and vegetables"),
-
         ("DIS014", "Maintain a regular sleep schedule"),
         ("DIS014", "Avoid screens before bedtime"),
         ("DIS014", "Create a comfortable sleep environment"),
-
         ("DIS015", "Increase fiber intake gradually"),
         ("DIS015", "Drink plenty of water"),
         ("DIS015", "Exercise regularly"),
         ("DIS015", "Do not ignore the urge to have a bowel movement"),
     ]
 
-    cursor.executemany("""
-        INSERT INTO disease_precautions (disease_id, precaution)
-        VALUES (?, ?)
-    """, precautions)
+    # Check if data already exists to avoid duplicate inserts
+    cursor.execute("SELECT COUNT(*) FROM disease_precautions")
+    count = cursor.fetchone()[0]
+    if count > 0:
+        return
+
+    for precaution in precautions:
+        cursor.execute("""
+            INSERT INTO disease_precautions (disease_id, precaution)
+            VALUES (%s, %s)
+        """, precaution)
 
 
-def _insert_food_allergens(cursor: sqlite3.Cursor):
+def _insert_food_allergens(cursor):
     """Insert food-to-allergen mappings."""
     allergens = [
-        # Shellfish allergen
-        ("shrimp", "shellfish"),
-        ("crab", "shellfish"),
-        ("lobster", "shellfish"),
-        ("prawns", "shellfish"),
-
-        # Dairy allergen
-        ("milk", "dairy"),
-        ("cheese", "dairy"),
-        ("yogurt", "dairy"),
-        ("cottage cheese", "dairy"),
-        ("butter", "dairy"),
-
-        # Gluten allergen
-        ("whole wheat bread", "gluten"),
-        ("bread", "gluten"),
-        ("macaroni", "gluten"),
-        ("oats", "gluten"),  # often contaminated
-
-        # Nut allergen
-        ("almonds", "nuts"),
-        ("walnuts", "nuts"),
-        ("peanuts", "nuts"),
-        ("cashews", "nuts"),
-
-        # Egg allergen
+        ("shrimp", "shellfish"), ("crab", "shellfish"),
+        ("lobster", "shellfish"), ("prawns", "shellfish"),
+        ("milk", "dairy"), ("cheese", "dairy"),
+        ("yogurt", "dairy"), ("cottage cheese", "dairy"), ("butter", "dairy"),
+        ("whole wheat bread", "gluten"), ("bread", "gluten"),
+        ("macaroni", "gluten"), ("oats", "gluten"),
+        ("almonds", "nuts"), ("walnuts", "nuts"),
+        ("peanuts", "nuts"), ("cashews", "nuts"),
         ("eggs", "eggs"),
-
-        # Fish allergen
-        ("fish", "fish"),
-        ("salmon", "fish"),
-        ("tuna", "fish"),
-
-        # Soy allergen
-        ("soy sauce", "soy"),
-        ("tofu", "soy"),
+        ("fish", "fish"), ("salmon", "fish"), ("tuna", "fish"),
+        ("soy sauce", "soy"), ("tofu", "soy"),
     ]
 
-    cursor.executemany("""
-        INSERT INTO food_allergens (food_name, allergen)
-        VALUES (?, ?)
-    """, allergens)
+    # Check if data already exists
+    cursor.execute("SELECT COUNT(*) FROM food_allergens")
+    count = cursor.fetchone()[0]
+    if count > 0:
+        return
+
+    for allergen in allergens:
+        cursor.execute("""
+            INSERT INTO food_allergens (food_name, allergen)
+            VALUES (%s, %s)
+        """, allergen)
 
 
-def _insert_medications(cursor: sqlite3.Cursor):
-    """Insert sample medication schedules for test users."""
-    medications = [
-        # User 001 - Diabetes + Hypertension
-        ("MED001", "user_001", "Metformin", "500mg",
-         json.dumps(["08:00", "20:00"]),
-         "للسكري", "For diabetes",
-         "تناوله مع الطعام", "Take with food"),
-
-        ("MED002", "user_001", "Lisinopril", "10mg",
-         json.dumps(["09:00"]),
-         "لضغط الدم", "For blood pressure",
-         "تناوله في نفس الوقت يومياً", "Take at the same time daily"),
-
-        # User 002 - Osteoporosis
-        ("MED003", "user_002", "Calcium", "600mg",
-         json.dumps(["08:00"]),
-         "لصحة العظام", "For bone health",
-         "تناوله مع الطعام", "Take with food"),
-
-        ("MED004", "user_002", "Vitamin D", "1000IU",
-         json.dumps(["08:00"]),
-         "لامتصاص الكالسيوم", "For calcium absorption",
-         "يمكن تناوله مع الكالسيوم", "Can be taken with calcium"),
-
-        # User 003 - Heart Disease
-        ("MED005", "user_003", "Aspirin", "81mg",
-         json.dumps(["07:00"]),
-         "لصحة القلب", "For heart health",
-         "تناوله مع الطعام لحماية المعدة", "Take with food to protect stomach"),
-
-        ("MED006", "user_003", "Simvastatin", "20mg",
-         json.dumps(["21:00"]),
-         "للكوليسترول", "For cholesterol",
-         "تناوله في المساء", "Take in the evening"),
-
-        ("MED007", "user_003", "Warfarin", "5mg",
-         json.dumps(["18:00"]),
-         "لسيولة الدم", "For blood thinning",
-         "تناوله في نفس الوقت يومياً واحذر من فيتامين ك", "Take at same time daily, watch vitamin K intake"),
-
-        # User 004 - Thyroid
-        ("MED008", "user_004", "Levothyroxine", "50mcg",
-         json.dumps(["06:00"]),
-         "للغدة الدرقية", "For thyroid",
-         "تناوله على معدة فارغة قبل الإفطار بـ30 دقيقة", "Take on empty stomach 30 min before breakfast"),
-    ]
-
-    cursor.executemany("""
-        INSERT OR IGNORE INTO medications
-        (med_id, user_id, name, dose, schedule, purpose_ar, purpose_en,
-         instructions_ar, instructions_en)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, medications)
-
-
-def _insert_exercises(cursor: sqlite3.Cursor):
+def _insert_exercises(cursor):
     """Insert exercise recommendations by mobility level."""
     exercises = [
         # LIMITED mobility
         ("EX001", "تمارين التنفس العميق", "Deep Breathing Exercises", "limited", "seated",
          "5 دقائق", json.dumps([
-             "اجلس بشكل مريح",
-             "تنفس ببطء من الأنف لمدة 4 ثواني",
-             "احبس النفس لمدة 4 ثواني",
-             "أخرج النفس من الفم لمدة 6 ثواني",
-             "كرر 5 مرات"
+             "اجلس بشكل مريح", "تنفس ببطء من الأنف لمدة 4 ثواني",
+             "احبس النفس لمدة 4 ثواني", "أخرج النفس من الفم لمدة 6 ثواني", "كرر 5 مرات"
          ]),
          "يقلل التوتر ويحسن الأكسجين في الدم", "Reduces stress and improves blood oxygen",
-         "توقف إذا شعرت بدوخة", "Stop if you feel dizzy",
-         json.dumps([])),
+         "توقف إذا شعرت بدوخة", "Stop if you feel dizzy", json.dumps([])),
 
         ("EX002", "تمارين الكاحل", "Ankle Circles", "limited", "seated",
          "3 دقائق", json.dumps([
-             "اجلس على كرسي ثابت",
-             "ارفع قدمك قليلاً عن الأرض",
-             "أدر الكاحل في دوائر 10 مرات",
-             "بدل الاتجاه",
-             "كرر مع القدم الأخرى"
+             "اجلس على كرسي ثابت", "ارفع قدمك قليلاً عن الأرض",
+             "أدر الكاحل في دوائر 10 مرات", "بدل الاتجاه", "كرر مع القدم الأخرى"
          ]),
          "يحسن الدورة الدموية في الساقين", "Improves blood circulation in legs",
-         "لا تفرط في الحركة", "Do not overexert",
-         json.dumps([])),
+         "لا تفرط في الحركة", "Do not overexert", json.dumps([])),
 
         ("EX003", "تمارين اليدين والأصابع", "Hand and Finger Exercises", "limited", "seated",
          "5 دقائق", json.dumps([
-             "اجلس بشكل مريح",
-             "افتح وأغلق يديك 10 مرات",
-             "أدر معصميك في دوائر",
-             "اضغط على كرة لينة إذا متاحة",
-             "كرر 3 مجموعات"
+             "اجلس بشكل مريح", "افتح وأغلق يديك 10 مرات",
+             "أدر معصميك في دوائر", "اضغط على كرة لينة إذا متاحة", "كرر 3 مجموعات"
          ]),
          "يحسن مرونة اليدين ويقلل تيبس المفاصل", "Improves hand flexibility and reduces joint stiffness",
-         "توقف إذا شعرت بألم", "Stop if you feel pain",
-         json.dumps(["arthritis"])),
+         "توقف إذا شعرت بألم", "Stop if you feel pain", json.dumps(["arthritis"])),
 
         # MODERATE mobility
         ("EX004", "المشي في المكان", "Marching in Place", "moderate", "standing",
          "5 دقائق", json.dumps([
-             "قف بجانب كرسي للاستناد",
-             "ارفع ركبتك اليمنى",
-             "أنزلها وارفع ركبتك اليسرى",
-             "استمر ببطء لمدة 5 دقائق"
+             "قف بجانب كرسي للاستناد", "ارفع ركبتك اليمنى",
+             "أنزلها وارفع ركبتك اليسرى", "استمر ببطء لمدة 5 دقائق"
          ]),
          "يحسن اللياقة القلبية والتوازن", "Improves cardiovascular fitness and balance",
-         "استخدم الكرسي للتوازن", "Use chair for balance",
-         json.dumps([])),
+         "استخدم الكرسي للتوازن", "Use chair for balance", json.dumps([])),
 
         ("EX005", "تمارين رفع الذراعين", "Arm Raises", "moderate", "standing",
          "3 دقائق", json.dumps([
-             "قف أو اجلس بشكل مستقيم",
-             "ارفع ذراعيك للأمام ببطء",
-             "ارفعهما فوق رأسك",
-             "أنزلهما ببطء",
-             "كرر 10 مرات"
+             "قف أو اجلس بشكل مستقيم", "ارفع ذراعيك للأمام ببطء",
+             "ارفعهما فوق رأسك", "أنزلهما ببطء", "كرر 10 مرات"
          ]),
          "يقوي عضلات الكتف والذراع", "Strengthens shoulder and arm muscles",
-         "لا ترفع أعلى من راحتك", "Don't raise higher than comfortable",
-         json.dumps([])),
+         "لا ترفع أعلى من راحتك", "Don't raise higher than comfortable", json.dumps([])),
 
         ("EX006", "تمارين القرفصاء الخفيفة", "Light Squats", "moderate", "standing",
          "5 دقائق", json.dumps([
-             "قف خلف كرسي ثابت",
-             "امسك ظهر الكرسي بكلتا يديك",
-             "انزل ببطء كأنك تجلس",
-             "قف مرة أخرى",
-             "كرر 8 مرات"
+             "قف خلف كرسي ثابت", "امسك ظهر الكرسي بكلتا يديك",
+             "انزل ببطء كأنك تجلس", "قف مرة أخرى", "كرر 8 مرات"
          ]),
          "يقوي عضلات الساقين", "Strengthens leg muscles",
          "لا تنزل أكثر من 90 درجة", "Don't go lower than 90 degrees",
@@ -847,21 +714,16 @@ def _insert_exercises(cursor: sqlite3.Cursor):
         # GOOD mobility
         ("EX007", "المشي الخفيف", "Light Walking", "good", "walking",
          "15-20 دقيقة", json.dumps([
-             "اختر مكاناً مستوياً وآمناً",
-             "امشِ بخطوات ثابتة",
-             "حافظ على وتيرة مريحة",
-             "استرح كل 5 دقائق إذا لزم الأمر"
+             "اختر مكاناً مستوياً وآمناً", "امشِ بخطوات ثابتة",
+             "حافظ على وتيرة مريحة", "استرح كل 5 دقائق إذا لزم الأمر"
          ]),
          "يحسن صحة القلب والمزاج", "Improves heart health and mood",
-         "تجنب الأسطح غير المستوية", "Avoid uneven surfaces",
-         json.dumps([])),
+         "تجنب الأسطح غير المستوية", "Avoid uneven surfaces", json.dumps([])),
 
         ("EX008", "تمارين التوازن", "Balance Exercises", "good", "standing",
          "10 دقائق", json.dumps([
-             "قف بجانب حائط أو كرسي للأمان",
-             "ارفع قدماً واحدة لمدة 10 ثوانٍ",
-             "بدل إلى القدم الأخرى",
-             "كرر 5 مرات لكل قدم",
+             "قف بجانب حائط أو كرسي للأمان", "ارفع قدماً واحدة لمدة 10 ثوانٍ",
+             "بدل إلى القدم الأخرى", "كرر 5 مرات لكل قدم",
              "حاول زيادة المدة تدريجياً"
          ]),
          "يقلل خطر السقوط ويحسن الثبات", "Reduces fall risk and improves stability",
@@ -869,21 +731,33 @@ def _insert_exercises(cursor: sqlite3.Cursor):
          json.dumps([])),
     ]
 
-    cursor.executemany("""
-        INSERT OR IGNORE INTO exercises
-        (exercise_id, name_ar, name_en, mobility_level, exercise_type, duration,
-         steps, benefits_ar, benefits_en, safety_ar, safety_en, avoid_conditions)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, exercises)
+    for exercise in exercises:
+        cursor.execute("""
+            INSERT INTO exercises
+            (exercise_id, name_ar, name_en, mobility_level, exercise_type, duration,
+             steps, benefits_ar, benefits_en, safety_ar, safety_en, avoid_conditions)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (exercise_id) DO NOTHING
+        """, exercise)
 
 
 def reset_database():
-    """Delete and recreate the database. Useful for testing."""
-    if os.path.exists(DB_PATH):
-        os.remove(DB_PATH)
-    # Also remove WAL/SHM files if they exist
-    for ext in ["-wal", "-shm"]:
-        path = DB_PATH + ext
-        if os.path.exists(path):
-            os.remove(path)
+    """Drop and recreate all tables. Useful for testing."""
+    conn = psycopg2.connect(DATABASE_URL)
+    cursor = conn.cursor()
+    try:
+        tables = [
+            "disease_precautions", "food_allergens", "medical_reports",
+            "exercises", "disease_symptoms", "drug_food_interactions",
+            "condition_dietary_rules", "meals",
+        ]
+        for table in tables:
+            cursor.execute(f"DROP TABLE IF EXISTS {table} CASCADE")
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
+
+    global _initialized
+    _initialized = False
     _initialize_database()

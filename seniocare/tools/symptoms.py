@@ -99,7 +99,7 @@ def assess_symptoms(symptoms: list, tool_context: ToolContext) -> dict:
 
             # Get precautions
             cursor.execute(
-                "SELECT precaution FROM disease_precautions WHERE disease_id = ?",
+                "SELECT precaution FROM disease_precautions WHERE disease_id = %s",
                 (disease["disease_id"],)
             )
             precautions = [row["precaution"] for row in cursor.fetchall()]

@@ -38,7 +38,7 @@ def get_meal_options(meal_type: str, tool_context: ToolContext) -> dict:
     try:
         # Step 1: Get all meals of the requested type
         cursor.execute(
-            "SELECT * FROM meals WHERE meal_type = ?",
+            "SELECT * FROM meals WHERE meal_type = %s",
             (meal_type.lower(),)
         )
         all_meals = [dict(row) for row in cursor.fetchall()]
@@ -57,7 +57,7 @@ def get_meal_options(meal_type: str, tool_context: ToolContext) -> dict:
 
         for condition in conditions:
             cursor.execute(
-                "SELECT * FROM condition_dietary_rules WHERE condition = ?",
+                "SELECT * FROM condition_dietary_rules WHERE condition = %s",
                 (condition.lower(),)
             )
             rule = cursor.fetchone()
@@ -85,7 +85,7 @@ def get_meal_options(meal_type: str, tool_context: ToolContext) -> dict:
         # Step 3: Exclude meals containing allergens
         excluded_by_allergy = []
         if allergies:
-            placeholders = ','.join('?' * len(allergies))
+            placeholders = ','.join('%s' for _ in allergies)
             cursor.execute(
                 f"SELECT DISTINCT food_name FROM food_allergens WHERE allergen IN ({placeholders})",
                 [a.lower() for a in allergies]
@@ -169,7 +169,7 @@ def get_meal_recipe(meal_id: str, tool_context: ToolContext) -> dict:
     cursor = conn.cursor()
 
     try:
-        cursor.execute("SELECT * FROM meals WHERE meal_id = ?", (meal_id,))
+        cursor.execute("SELECT * FROM meals WHERE meal_id = %s", (meal_id,))
         meal = cursor.fetchone()
 
         if not meal:

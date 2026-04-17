@@ -58,14 +58,15 @@ State keys use ADK prefix scoping:
 
 Session & Memory:
 ━━━━━━━━━━━━━━━━━
-• SessionService: DatabaseSessionService (SQLite) — configured in main.py
-• MemoryService: InMemoryMemoryService (default) — auto-saves sessions
+• SessionService: DatabaseSessionService (Neon PostgreSQL) — configured in main.py
+• MemoryService: Persistent via cloud DB — auto-saves sessions
 • Sessions are managed via ADK endpoints (create, get, list, delete)
 • Backend sends user profile on first session; ADK persists via user: keys
 
 ================================================================================
 """
 
+import re
 from google.adk.agents import SequentialAgent
 
 # Import sub-agents
@@ -74,7 +75,7 @@ from seniocare.sub_agents.feature_agent import feature_agent
 from seniocare.sub_agents.formatter_agent import formatter_agent
 
 # Also ensure the database is initialized on startup
-from seniocare.data.database import reset_database as _init_db
+from seniocare.data.database import _initialize_database as _init_db
 _init_db()
 
 
@@ -95,7 +96,7 @@ _init_db()
 #    Only runs if user:user_id is not set (first message ever).
 
 TEST_USER_PROFILE = {
-    "user:user_id": "user_001",
+    "user:user_id": "test_user_001",
     "user:user_name": "Ahmed",
     "user:age": 72,
     "user:weight": 78.0,
@@ -110,6 +111,30 @@ TEST_USER_PROFILE = {
     "user:mobilityStatus": "limited",
     "user:bloodType": "A+",
     "user:caregiver_ids": [],
+    "user:preferences": {
+        "food_likes": [],
+        "food_dislikes": [],
+        "exercise_likes": [],
+        "exercise_dislikes": [],
+        "general_likes": [],
+        "general_dislikes": [],
+    },
+}
+
+
+# Headline mapping: orchestrator intent → Arabic headline with emoji
+INTENT_HEADLINES = {
+    "meal": "🍽️ توصية وجبة",
+    "exercise": "🏃 تمارين رياضية",
+    "symptom_assessment": "🩺 تقييم أعراض",
+    "medical_qa": "❓ سؤال طبي",
+    "emotional": "💚 دعم نفسي",
+    "routine": "📋 روتين يومي",
+    "preference": "⚙️ تفضيلات المستخدم",
+    "image_medication": "📸 تحليل صورة دواء",
+    "image_report": "📋 تحليل تقرير طبي",
+    "emergency": "🚨 حالة طوارئ",
+    "blocked": "⛔ طلب محظور",
 }
 
 
@@ -119,6 +144,9 @@ async def populate_user_data(callback_context):
     For ADK web testing: populates test user data if no user profile exists.
     For production: user data is already persisted via /set-user-profile endpoint
     and ADK loads it automatically for the same user_id.
+
+    Also builds a compact conversation history from previous turns and injects
+    it into state for the orchestrator's context awareness.
     """
     state = callback_context.state
 
@@ -131,24 +159,98 @@ async def populate_user_data(callback_context):
               f"(chronicDiseases: {TEST_USER_PROFILE['user:chronicDiseases']}, "
               f"medications: {[m['name'] for m in TEST_USER_PROFILE['user:medications']]})")
 
+    # Initialize preferences if not set
+    if not state.get("user:preferences"):
+        state["user:preferences"] = {
+            "food_likes": [], "food_dislikes": [],
+            "exercise_likes": [], "exercise_dislikes": [],
+            "general_likes": [], "general_dislikes": [],
+        }
+
     # Track conversation turns (session-scoped, resets per session)
     turn_count = state.get("conversation_turn_count", 0)
     state["conversation_turn_count"] = turn_count + 1
 
+    # Build compact conversation history from previous turns
+    # This gives the orchestrator context for follow-up questions
+    try:
+        session = callback_context._invocation_context.session
+        history_lines = []
+        for event in session.events[-12:]:  # Last 12 events (approx 3-4 turns)
+            if not hasattr(event, 'content') or not event.content:
+                continue
+            if not event.content.parts:
+                continue
+            text = event.content.parts[0].text or ""
+            if not text.strip():
+                continue
+
+            if event.author == "user":
+                # Keep user messages compact (max 200 chars)
+                history_lines.append(f"User: {text[:200]}")
+            elif event.author == "formatter_agent":
+                # Keep agent responses compact (max 200 chars)
+                history_lines.append(f"Assistant: {text[:200]}")
+
+        # Only keep last 6 lines (3 exchanges)
+        state["conversation_history"] = "\n".join(history_lines[-6:]) if history_lines else "No previous conversation."
+    except Exception as e:
+        state["conversation_history"] = "No previous conversation."
+        print(f"[SenioCare] History building notice: {e}")
+
 
 # =============================================================================
-# MEMORY AUTO-SAVE CALLBACK
+# MEMORY AUTO-SAVE CALLBACK + HEADLINE GENERATION
 # =============================================================================
-# After each agent invocation, save the session to long-term memory.
-# This allows the agent to recall past conversations in future sessions
-# via the load_memory tool.
+# After each agent invocation:
+# 1. Save the session to long-term memory for cross-session recall
+# 2. Generate a conversation headline from the orchestrator's intent
+#    (only on the first turn of a new session)
 
 async def auto_save_to_memory(callback_context):
-    """Auto-save session to long-term memory after each turn.
+    """Auto-save session to long-term memory and generate headline.
 
-    This enables cross-session recall — the agent can search past
-    conversations to provide more personalized responses.
+    This callback runs after each complete pipeline execution.
+    - Saves session for cross-session recall (via memory service)
+    - Generates a headline from the orchestrator's classified intent
+      (stored in session state for the /chat-history endpoint)
     """
+    state = callback_context.state
+
+    # --- Headline Generation (first turn only) ---
+    if state.get("conversation_turn_count") == 1 and not state.get("session_headline"):
+        try:
+            orchestrator_output = state.get("orchestrator_result", "")
+
+            # Extract intent from orchestrator output using regex
+            intent = _extract_intent(orchestrator_output)
+            headline = INTENT_HEADLINES.get(intent, "💬 محادثة جديدة")
+
+            # Add a context snippet from the first user message
+            session = callback_context._invocation_context.session
+            first_user_msg = ""
+            for event in session.events:
+                if hasattr(event, 'content') and event.content and event.content.parts:
+                    if event.author == "user":
+                        first_user_msg = event.content.parts[0].text or ""
+                        break
+
+            if first_user_msg:
+                # Append a short snippet for context (e.g., "🍽️ توصية وجبة — عايز فطار صحي")
+                snippet = first_user_msg[:40].strip()
+                if len(first_user_msg) > 40:
+                    snippet += "..."
+                headline = f"{headline} — {snippet}"
+
+            state["session_headline"] = headline
+            state["session_preview"] = first_user_msg[:100] if first_user_msg else ""
+            print(f"[SenioCare] Headline generated: {headline}")
+
+        except Exception as e:
+            state["session_headline"] = "💬 محادثة جديدة"
+            print(f"[SenioCare] Headline generation notice: {e}")
+
+    # --- Memory Auto-Save ---
     try:
         invocation_ctx = callback_context._invocation_context
         memory_service = invocation_ctx.memory_service
@@ -160,6 +262,27 @@ async def auto_save_to_memory(callback_context):
         print(f"[SenioCare] Memory save warning: {e}")
 
 
+def _extract_intent(orchestrator_output: str) -> str:
+    """Extract the INTENT value from the orchestrator's structured output.
+
+    The orchestrator outputs text like:
+        INTENT: meal
+    or
+        INTENT: symptom_assessment
+
+    Returns the intent string, or 'unknown' if not found.
+    """
+    if not orchestrator_output:
+        return "unknown"
+
+    # Look for "INTENT: <value>" pattern
+    match = re.search(r'INTENT:\s*(\w+)', orchestrator_output)
+    if match:
+        return match.group(1).lower().strip()
+
+    return "unknown"
+
+
 # =============================================================================
 # MAIN PIPELINE (ROOT AGENT)
 # =============================================================================
@@ -169,8 +292,8 @@ async def auto_save_to_memory(callback_context):
 # 3. Formatter Agent    → final_response (Egyptian Arabic formatted response)
 #
 # Callbacks:
-#   before_agent_callback → populate_user_data (load user profile + track turns)
-#   after_agent_callback  → auto_save_to_memory (save session for long-term recall)
+#   before_agent_callback → populate_user_data (load user profile + track turns + build history)
+#   after_agent_callback  → auto_save_to_memory (save session + generate headline)
 
 root_agent = SequentialAgent(
     name="seniocare",
