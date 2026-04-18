@@ -40,3 +40,14 @@ brain/
 
 # Datasets
 Datasets/
+
+# Local SQLite dev databases (use Neon PostgreSQL in production)
+*.db
+sessions.db
+
+# Test cache
+.pytest_cache/
+
+# OS / editor
+.DS_Store
+Thumbs.db

@@ -1,0 +1,44 @@
+[
+  {
+    "rule_id": "R001", "condition": "diabetes",
+    "avoid_high": ["sugar_g", "carbohydrate_g"],
+    "prefer_high": ["fiber_g", "protein_g"],
+    "avoid_foods": ["sweets", "sugary drinks"],
+    "max_values": {"sugar_g": 10, "carbohydrate_g": 45}
+  },
+  {
+    "rule_id": "R002", "condition": "hypertension",
+    "avoid_high": ["sodium_mg"],
+    "prefer_high": ["fiber_g"],
+    "avoid_foods": ["processed foods", "pickles"],
+    "max_values": {"sodium_mg": 200}
+  },
+  {
+    "rule_id": "R003", "condition": "arthritis",
+    "avoid_high": ["fat_g"],
+    "prefer_high": ["protein_g", "fiber_g"],
+    "avoid_foods": ["fried foods"],
+    "max_values": {"fat_g": 20}
+  },
+  {
+    "rule_id": "R004", "condition": "heart disease",
+    "avoid_high": ["fat_g", "sodium_mg", "sugar_g"],
+    "prefer_high": ["fiber_g", "protein_g"],
+    "avoid_foods": ["fried foods", "processed meats"],
+    "max_values": {"fat_g": 15, "sodium_mg": 150, "sugar_g": 12}
+  },
+  {
+    "rule_id": "R005", "condition": "kidney disease",
+    "avoid_high": ["sodium_mg", "protein_g"],
+    "prefer_high": ["carbohydrate_g"],
+    "avoid_foods": ["high protein foods", "salty foods"],
+    "max_values": {"sodium_mg": 100, "protein_g": 20}
+  },
+  {
+    "rule_id": "R006", "condition": "osteoporosis",
+    "avoid_high": [],
+    "prefer_high": ["protein_g"],
+    "avoid_foods": [],
+    "max_values": {}
+  }
+]

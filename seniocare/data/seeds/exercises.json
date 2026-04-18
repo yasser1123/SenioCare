@@ -1,0 +1,66 @@
+[
+  {
+    "exercise_id": "EX001", "name_ar": "تمارين التنفس العميق", "name_en": "Deep Breathing Exercises",
+    "mobility_level": "limited", "exercise_type": "seated", "duration": "5 دقائق",
+    "steps": ["اجلس بشكل مريح", "تنفس ببطء من الأنف لمدة 4 ثواني", "احبس النفس لمدة 4 ثواني", "أخرج النفس من الفم لمدة 6 ثواني", "كرر 5 مرات"],
+    "benefits_ar": "يقلل التوتر ويحسن الأكسجين في الدم", "benefits_en": "Reduces stress and improves blood oxygen",
+    "safety_ar": "توقف إذا شعرت بدوخة", "safety_en": "Stop if you feel dizzy",
+    "avoid_conditions": []
+  },
+  {
+    "exercise_id": "EX002", "name_ar": "تمارين الكاحل", "name_en": "Ankle Circles",
+    "mobility_level": "limited", "exercise_type": "seated", "duration": "3 دقائق",
+    "steps": ["اجلس على كرسي ثابت", "ارفع قدمك قليلاً عن الأرض", "أدر الكاحل في دوائر 10 مرات", "بدل الاتجاه", "كرر مع القدم الأخرى"],
+    "benefits_ar": "يحسن الدورة الدموية في الساقين", "benefits_en": "Improves blood circulation in legs",
+    "safety_ar": "لا تفرط في الحركة", "safety_en": "Do not overexert",
+    "avoid_conditions": []
+  },
+  {
+    "exercise_id": "EX003", "name_ar": "تمارين اليدين والأصابع", "name_en": "Hand and Finger Exercises",
+    "mobility_level": "limited", "exercise_type": "seated", "duration": "5 دقائق",
+    "steps": ["اجلس بشكل مريح", "افتح وأغلق يديك 10 مرات", "أدر معصميك في دوائر", "اضغط على كرة لينة إذا متاحة", "كرر 3 مجموعات"],
+    "benefits_ar": "يحسن مرونة اليدين ويقلل تيبس المفاصل", "benefits_en": "Improves hand flexibility and reduces joint stiffness",
+    "safety_ar": "توقف إذا شعرت بألم", "safety_en": "Stop if you feel pain",
+    "avoid_conditions": ["arthritis"]
+  },
+  {
+    "exercise_id": "EX004", "name_ar": "المشي في المكان", "name_en": "Marching in Place",
+    "mobility_level": "moderate", "exercise_type": "standing", "duration": "5 دقائق",
+    "steps": ["قف بجانب كرسي للاستناد", "ارفع ركبتك اليمنى", "أنزلها وارفع ركبتك اليسرى", "استمر ببطء لمدة 5 دقائق"],
+    "benefits_ar": "يحسن اللياقة القلبية والتوازن", "benefits_en": "Improves cardiovascular fitness and balance",
+    "safety_ar": "استخدم الكرسي للتوازن", "safety_en": "Use chair for balance",
+    "avoid_conditions": []
+  },
+  {
+    "exercise_id": "EX005", "name_ar": "تمارين رفع الذراعين", "name_en": "Arm Raises",
+    "mobility_level": "moderate", "exercise_type": "standing", "duration": "3 دقائق",
+    "steps": ["قف أو اجلس بشكل مستقيم", "ارفع ذراعيك للأمام ببطء", "ارفعهما فوق رأسك", "أنزلهما ببطء", "كرر 10 مرات"],
+    "benefits_ar": "يقوي عضلات الكتف والذراع", "benefits_en": "Strengthens shoulder and arm muscles",
+    "safety_ar": "لا ترفع أعلى من راحتك", "safety_en": "Don't raise higher than comfortable",
+    "avoid_conditions": []
+  },
+  {
+    "exercise_id": "EX006", "name_ar": "تمارين القرفصاء الخفيفة", "name_en": "Light Squats",
+    "mobility_level": "moderate", "exercise_type": "standing", "duration": "5 دقائق",
+    "steps": ["قف خلف كرسي ثابت", "امسك ظهر الكرسي بكلتا يديك", "انزل ببطء كأنك تجلس", "قف مرة أخرى", "كرر 8 مرات"],
+    "benefits_ar": "يقوي عضلات الساقين", "benefits_en": "Strengthens leg muscles",
+    "safety_ar": "لا تنزل أكثر من 90 درجة", "safety_en": "Don't go lower than 90 degrees",
+    "avoid_conditions": ["arthritis", "knee injury"]
+  },
+  {
+    "exercise_id": "EX007", "name_ar": "المشي الخفيف", "name_en": "Light Walking",
+    "mobility_level": "good", "exercise_type": "walking", "duration": "15-20 دقيقة",
+    "steps": ["اختر مكاناً مستوياً وآمناً", "امشِ بخطوات ثابتة", "حافظ على وتيرة مريحة", "استرح كل 5 دقائق إذا لزم الأمر"],
+    "benefits_ar": "يحسن صحة القلب والمزاج", "benefits_en": "Improves heart health and mood",
+    "safety_ar": "تجنب الأسطح غير المستوية", "safety_en": "Avoid uneven surfaces",
+    "avoid_conditions": []
+  },
+  {
+    "exercise_id": "EX008", "name_ar": "تمارين التوازن", "name_en": "Balance Exercises",
+    "mobility_level": "good", "exercise_type": "standing", "duration": "10 دقائق",
+    "steps": ["قف بجانب حائط أو كرسي للأمان", "ارفع قدماً واحدة لمدة 10 ثوانٍ", "بدل إلى القدم الأخرى", "كرر 5 مرات لكل قدم", "حاول زيادة المدة تدريجياً"],
+    "benefits_ar": "يقلل خطر السقوط ويحسن الثبات", "benefits_en": "Reduces fall risk and improves stability",
+    "safety_ar": "احتفظ دائماً بشيء تستند إليه قريباً", "safety_en": "Always keep something to hold nearby",
+    "avoid_conditions": []
+  }
+]

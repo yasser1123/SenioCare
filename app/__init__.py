@@ -1,0 +1,1 @@
+"""SenioCare API Application package."""

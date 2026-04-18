@@ -1,0 +1,9 @@
+[
+  ["shrimp", "shellfish"], ["crab", "shellfish"], ["lobster", "shellfish"], ["prawns", "shellfish"],
+  ["milk", "dairy"], ["cheese", "dairy"], ["yogurt", "dairy"], ["cottage cheese", "dairy"], ["butter", "dairy"],
+  ["whole wheat bread", "gluten"], ["bread", "gluten"], ["macaroni", "gluten"], ["oats", "gluten"],
+  ["almonds", "nuts"], ["walnuts", "nuts"], ["peanuts", "nuts"], ["cashews", "nuts"],
+  ["eggs", "eggs"],
+  ["fish", "fish"], ["salmon", "fish"], ["tuna", "fish"],
+  ["soy sauce", "soy"], ["tofu", "soy"]
+]

@@ -1,0 +1,192 @@
+[
+  {
+    "meal_id": "M001", "name_ar": "فول مدمس بزيت الزيتون", "name_en": "Foul Medames with Olive Oil",
+    "meal_type": "breakfast", "category": "legumes",
+    "ingredients": ["foul", "olive oil", "lemon", "cumin"],
+    "energy_kcal": 280, "protein_g": 15.0, "fat_g": 8.0, "carbohydrate_g": 35.0,
+    "fiber_g": 9.0, "sodium_mg": 50.0, "sugar_g": 2.0, "prep_time": "15 min",
+    "notes_ar": "منخفض السكر، غني بالألياف", "notes_en": "Low sugar, high fiber",
+    "recipe_steps": ["انقع الفول ليلة كاملة في مية", "اسلقه في حلة الضغط ساعة", "صفيه وحطه في طبق", "ضيف زيت الزيتون والليمون والكمون", "قدمه دافي مع عيش أسمر"],
+    "recipe_tips": "ممكن تضيف طحينة أو بيض مسلوق حسب رغبتك"
+  },
+  {
+    "meal_id": "M002", "name_ar": "بيض مسلوق مع خبز أسمر", "name_en": "Boiled Eggs with Whole Wheat Bread",
+    "meal_type": "breakfast", "category": "protein",
+    "ingredients": ["eggs", "whole wheat bread", "cucumber", "tomato"],
+    "energy_kcal": 310, "protein_g": 18.0, "fat_g": 12.0, "carbohydrate_g": 30.0,
+    "fiber_g": 4.0, "sodium_mg": 180.0, "sugar_g": 3.0, "prep_time": "10 min",
+    "notes_ar": "بروتين عالي، كربوهيدرات معتدلة", "notes_en": "High protein, moderate carbs",
+    "recipe_steps": ["اسلق البيض في مية 10 دقايق", "قشر البيض وقطعه أنصاص", "قطع الخيار والطماطم شرائح", "قدم البيض مع العيش الأسمر والخضار"],
+    "recipe_tips": "البيض المسلوق نص سوا أسهل في الهضم"
+  },
+  {
+    "meal_id": "M003", "name_ar": "شوفان بالحليب والفواكه", "name_en": "Oatmeal with Milk and Fruits",
+    "meal_type": "breakfast", "category": "grains",
+    "ingredients": ["oats", "milk", "banana", "honey", "cinnamon"],
+    "energy_kcal": 350, "protein_g": 12.0, "fat_g": 7.0, "carbohydrate_g": 55.0,
+    "fiber_g": 6.0, "sodium_mg": 70.0, "sugar_g": 18.0, "prep_time": "10 min",
+    "notes_ar": "طاقة مستدامة", "notes_en": "Sustained energy",
+    "recipe_steps": ["سخن الحليب على نار هادية", "ضيف الشوفان وقلب كويس", "سيبه 5 دقايق على نار واطية", "ضيف الموز المقطع والعسل والقرفة"],
+    "recipe_tips": "ممكن تستخدم حليب قليل الدسم لسعرات أقل"
+  },
+  {
+    "meal_id": "M004", "name_ar": "جبنة قريش مع خضار", "name_en": "Cottage Cheese with Vegetables",
+    "meal_type": "breakfast", "category": "dairy",
+    "ingredients": ["cottage cheese", "cucumber", "tomato", "bell pepper", "olive oil"],
+    "energy_kcal": 200, "protein_g": 14.0, "fat_g": 9.0, "carbohydrate_g": 12.0,
+    "fiber_g": 2.0, "sodium_mg": 320.0, "sugar_g": 4.0, "prep_time": "5 min",
+    "notes_ar": "غني بالكالسيوم", "notes_en": "Rich in calcium",
+    "recipe_steps": ["قطع الخيار والطماطم والفلفل مكعبات صغيرة", "حط الجبنة القريش في طبق", "ضيف الخضار المقطعة فوقيها", "رش زيت الزيتون وقدمها"],
+    "recipe_tips": "الجبنة القريش غنية بالكالسيوم ومنخفضة الدهون"
+  },
+  {
+    "meal_id": "M005", "name_ar": "سمك مشوي مع خضار", "name_en": "Grilled Fish with Vegetables",
+    "meal_type": "lunch", "category": "protein",
+    "ingredients": ["fish", "broccoli", "carrot", "lemon", "olive oil"],
+    "energy_kcal": 320, "protein_g": 35.0, "fat_g": 10.0, "carbohydrate_g": 15.0,
+    "fiber_g": 5.0, "sodium_mg": 90.0, "sugar_g": 3.0, "prep_time": "30 min",
+    "notes_ar": "منخفض الدهون، غني بالأوميجا 3", "notes_en": "Low fat, rich in omega-3",
+    "recipe_steps": ["تبل السمك بالليمون والملح والفلفل", "سخن الشواية على نار متوسطة", "اشوي السمك 7 دقايق كل جانب", "اسلق البروكلي والجزر على البخار", "قدم السمك مع الخضار وشريحة ليمون"],
+    "recipe_tips": "السمك المشوي أصح من المقلي بكتير ومفيد للقلب"
+  },
+  {
+    "meal_id": "M006", "name_ar": "دجاج مشوي مع أرز بني", "name_en": "Grilled Chicken with Brown Rice",
+    "meal_type": "lunch", "category": "protein",
+    "ingredients": ["chicken breast", "brown rice", "mixed vegetables", "garlic"],
+    "energy_kcal": 450, "protein_g": 38.0, "fat_g": 8.0, "carbohydrate_g": 50.0,
+    "fiber_g": 4.0, "sodium_mg": 120.0, "sugar_g": 2.0, "prep_time": "35 min",
+    "notes_ar": "بروتين عالي مع كربوهيدرات معقدة", "notes_en": "High protein with complex carbs",
+    "recipe_steps": ["تبل صدور الفراخ بالتوم والبهارات", "اشوي الفراخ في الفرن 30 دقيقة", "اسلق الأرز البني", "سوتيه الخضار مع شوية زيت زيتون", "قدم الفراخ مع الأرز والخضار"],
+    "recipe_tips": "شيل الجلد من الفراخ عشان تقلل الدهون"
+  },
+  {
+    "meal_id": "M007", "name_ar": "كشري مصري", "name_en": "Egyptian Koshari",
+    "meal_type": "lunch", "category": "grains",
+    "ingredients": ["rice", "lentils", "macaroni", "tomato sauce", "onion", "garlic"],
+    "energy_kcal": 550, "protein_g": 18.0, "fat_g": 7.0, "carbohydrate_g": 90.0,
+    "fiber_g": 8.0, "sodium_mg": 480.0, "sugar_g": 12.0, "prep_time": "40 min",
+    "notes_ar": "وجبة مصرية تقليدية غنية بالطاقة", "notes_en": "Traditional Egyptian high-energy meal",
+    "recipe_steps": ["اسلق الأرز والعدس والمكرونة كل واحد لوحده", "حمر البصل لحد ما يبقى ذهبي ومقرمش", "اعمل صلصة طماطم بالتوم والخل", "رص الأرز والعدس والمكرونة في طبق", "ضيف الصلصة والبصل المحمر فوق"],
+    "recipe_tips": "الكشري وجبة مصرية كاملة غنية بالبروتين النباتي"
+  },
+  {
+    "meal_id": "M008", "name_ar": "شوربة عدس", "name_en": "Lentil Soup",
+    "meal_type": "lunch", "category": "soup",
+    "ingredients": ["red lentils", "carrot", "onion", "cumin", "lemon"],
+    "energy_kcal": 250, "protein_g": 16.0, "fat_g": 3.0, "carbohydrate_g": 38.0,
+    "fiber_g": 11.0, "sodium_mg": 45.0, "sugar_g": 4.0, "prep_time": "25 min",
+    "notes_ar": "غني بالألياف والبروتين النباتي", "notes_en": "Rich in fiber and plant protein",
+    "recipe_steps": ["اغسل العدس كويس", "سوتيه البصل والجزر المقطع", "ضيف العدس والمية واسلق 20 دقيقة", "اضرب في الخلاط لحد ما يبقى ناعم", "ضيف الكمون واعصر ليمونة فوقيه"],
+    "recipe_tips": "شوربة العدس مغذية جداً وسهلة في الهضم لكبار السن"
+  },
+  {
+    "meal_id": "M009", "name_ar": "سلطة تونة", "name_en": "Tuna Salad",
+    "meal_type": "lunch", "category": "protein",
+    "ingredients": ["tuna", "lettuce", "tomato", "cucumber", "olive oil", "lemon"],
+    "energy_kcal": 280, "protein_g": 30.0, "fat_g": 12.0, "carbohydrate_g": 8.0,
+    "fiber_g": 3.0, "sodium_mg": 350.0, "sugar_g": 2.0, "prep_time": "10 min",
+    "notes_ar": "غني بالبروتين والأوميجا 3", "notes_en": "Rich in protein and omega-3",
+    "recipe_steps": ["صفي التونة من الزيت كويس", "قطع الخس والطماطم والخيار", "اخلط الخضار مع التونة في طبق كبير", "ضيف زيت زيتون وعصير ليمون وقلب"],
+    "recipe_tips": "استخدم تونة في مية بدل الزيت لسعرات أقل"
+  },
+  {
+    "meal_id": "M010", "name_ar": "سلطة دجاج مشوي", "name_en": "Grilled Chicken Salad",
+    "meal_type": "dinner", "category": "salad",
+    "ingredients": ["chicken breast", "lettuce", "cucumber", "tomato", "olive oil"],
+    "energy_kcal": 260, "protein_g": 28.0, "fat_g": 10.0, "carbohydrate_g": 8.0,
+    "fiber_g": 3.0, "sodium_mg": 85.0, "sugar_g": 3.0, "prep_time": "20 min",
+    "notes_ar": "منخفض الكربوهيدرات", "notes_en": "Low carb",
+    "recipe_steps": ["اشوي صدور الفراخ واتبلها بالفلفل والليمون", "قطع الفراخ شرائح بعد ما تستوي", "قطع الخس والخيار والطماطم", "اخلط كل حاجة مع زيت زيتون"],
+    "recipe_tips": "ممكن تضيف شوية ليمون وأعشاب زي النعناع"
+  },
+  {
+    "meal_id": "M011", "name_ar": "سمك مشوي بالأعشاب", "name_en": "Herb-Grilled Fish",
+    "meal_type": "dinner", "category": "protein",
+    "ingredients": ["fish", "rosemary", "garlic", "lemon", "olive oil"],
+    "energy_kcal": 290, "protein_g": 32.0, "fat_g": 12.0, "carbohydrate_g": 5.0,
+    "fiber_g": 1.0, "sodium_mg": 60.0, "sugar_g": 1.0, "prep_time": "25 min",
+    "notes_ar": "بدون ملح، غني بالبوتاسيوم", "notes_en": "No salt, rich in potassium",
+    "recipe_steps": ["تبل السمك بالروزماري والتوم المفروم", "ضيف عصير ليمون وزيت زيتون", "لف السمك في ورق ألومنيوم", "اشوي في الفرن على 180 درجة لمدة 20 دقيقة"],
+    "recipe_tips": "الأعشاب بتدي نكهة حلوة من غير ما تحتاج ملح"
+  },
+  {
+    "meal_id": "M012", "name_ar": "خضار مطبوخة على البخار", "name_en": "Steamed Vegetables",
+    "meal_type": "dinner", "category": "vegetables",
+    "ingredients": ["broccoli", "carrot", "green beans", "zucchini"],
+    "energy_kcal": 120, "protein_g": 5.0, "fat_g": 1.0, "carbohydrate_g": 20.0,
+    "fiber_g": 7.0, "sodium_mg": 35.0, "sugar_g": 6.0, "prep_time": "15 min",
+    "notes_ar": "منخفض السعرات والصوديوم", "notes_en": "Low calorie and sodium",
+    "recipe_steps": ["قطع البروكلي والجزر والفاصوليا والكوسة", "حط الخضار في حلة البخار", "سيبها 10-15 دقيقة لحد ما تستوي", "قدمها مع شوية ليمون أو زيت زيتون"],
+    "recipe_tips": "خضار البخار بتحافظ على الفيتامينات أكتر من السلق"
+  },
+  {
+    "meal_id": "M013", "name_ar": "شوربة خضار", "name_en": "Vegetable Soup",
+    "meal_type": "dinner", "category": "soup",
+    "ingredients": ["carrot", "potato", "zucchini", "onion", "celery"],
+    "energy_kcal": 150, "protein_g": 4.0, "fat_g": 2.0, "carbohydrate_g": 25.0,
+    "fiber_g": 5.0, "sodium_mg": 60.0, "sugar_g": 7.0, "prep_time": "30 min",
+    "notes_ar": "وجبة خفيفة صحية", "notes_en": "Light healthy meal",
+    "recipe_steps": ["قطع الجزر والبطاطس والكوسة والبصل والكرفس", "سوتيه البصل في شوية زيت", "ضيف باقي الخضار والمية", "اسلق 25 دقيقة على نار هادية", "تبل بالملح القليل والفلفل"],
+    "recipe_tips": "ممكن تضربها في الخلاط لو حبيت شوربة ناعمة"
+  },
+  {
+    "meal_id": "M014", "name_ar": "سلمون مشوي مع كركم", "name_en": "Grilled Salmon with Turmeric",
+    "meal_type": "dinner", "category": "protein",
+    "ingredients": ["salmon", "turmeric", "ginger", "olive oil", "lemon"],
+    "energy_kcal": 380, "protein_g": 34.0, "fat_g": 22.0, "carbohydrate_g": 3.0,
+    "fiber_g": 0.5, "sodium_mg": 70.0, "sugar_g": 0.5, "prep_time": "20 min",
+    "notes_ar": "مضاد للالتهابات، غني بالأوميجا 3", "notes_en": "Anti-inflammatory, rich in omega-3",
+    "recipe_steps": ["اخلط الكركم والزنجبيل المبشور مع زيت الزيتون", "ادهن السلمون بالخليط من كل الجوانب", "اشوي في الفرن على 200 درجة لمدة 15 دقيقة", "اعصر ليمونة فوقيه وقدمه"],
+    "recipe_tips": "الكركم مضاد للالتهابات ومفيد جداً للمفاصل"
+  },
+  {
+    "meal_id": "M015", "name_ar": "زبادي مع مكسرات", "name_en": "Yogurt with Nuts",
+    "meal_type": "snack", "category": "dairy",
+    "ingredients": ["yogurt", "almonds", "walnuts", "honey"],
+    "energy_kcal": 220, "protein_g": 10.0, "fat_g": 12.0, "carbohydrate_g": 18.0,
+    "fiber_g": 2.0, "sodium_mg": 55.0, "sugar_g": 14.0, "prep_time": "5 min",
+    "notes_ar": "غني بالبروبيوتيك والدهون الصحية", "notes_en": "Rich in probiotics and healthy fats",
+    "recipe_steps": ["حط الزبادي في طبق", "ضيف اللوز والجوز فوقيه", "ضيف شوية عسل خفيف"],
+    "recipe_tips": "الزبادي غني بالبروبيوتيك المفيد للهضم"
+  },
+  {
+    "meal_id": "M016", "name_ar": "فاكهة موسمية", "name_en": "Seasonal Fruits",
+    "meal_type": "snack", "category": "fruits",
+    "ingredients": ["apple", "orange", "banana"],
+    "energy_kcal": 150, "protein_g": 2.0, "fat_g": 0.5, "carbohydrate_g": 35.0,
+    "fiber_g": 4.0, "sodium_mg": 5.0, "sugar_g": 25.0, "prep_time": "5 min",
+    "notes_ar": "فيتامينات وألياف طبيعية", "notes_en": "Natural vitamins and fiber",
+    "recipe_steps": ["اغسل الفاكهة كويس تحت المية", "قطع التفاح والبرتقال شرائح", "قدمها في طبق"],
+    "recipe_tips": "الفاكهة الطازجة أفضل من العصير عشان الألياف"
+  },
+  {
+    "meal_id": "M017", "name_ar": "سلطة جمبري", "name_en": "Shrimp Salad",
+    "meal_type": "lunch", "category": "protein",
+    "ingredients": ["shrimp", "lettuce", "avocado", "tomato", "lemon"],
+    "energy_kcal": 300, "protein_g": 28.0, "fat_g": 14.0, "carbohydrate_g": 10.0,
+    "fiber_g": 4.0, "sodium_mg": 420.0, "sugar_g": 2.0, "prep_time": "15 min",
+    "notes_ar": "غني بالبروتين", "notes_en": "Rich in protein",
+    "recipe_steps": ["اسلق الجمبري في مية مغلية 3 دقايق", "قطع الخس والأفوكادو والطماطم", "اخلط كل حاجة مع الجمبري", "ضيف عصير ليمون وزيت زيتون"],
+    "recipe_tips": "الجمبري غني بالبروتين وقليل الدهون"
+  },
+  {
+    "meal_id": "M018", "name_ar": "ملوخية مع أرز", "name_en": "Molokhia with Rice",
+    "meal_type": "lunch", "category": "vegetables",
+    "ingredients": ["molokhia", "rice", "chicken broth", "garlic", "coriander"],
+    "energy_kcal": 380, "protein_g": 12.0, "fat_g": 8.0, "carbohydrate_g": 55.0,
+    "fiber_g": 5.0, "sodium_mg": 280.0, "sugar_g": 3.0, "prep_time": "40 min",
+    "notes_ar": "وجبة مصرية تقليدية", "notes_en": "Traditional Egyptian meal",
+    "recipe_steps": ["سخن مرقة الفراخ", "ضيف الملوخية المفرومة وقلب", "في حلة تانية حمر التوم مع الكزبرة الناشفة", "ضيف التقلية على الملوخية وقلب", "قدمها مع الأرز الأبيض"],
+    "recipe_tips": "الملوخية مفيدة للهضم وغنية بالفيتامينات"
+  },
+  {
+    "meal_id": "M019", "name_ar": "جريب فروت طازج", "name_en": "Fresh Grapefruit",
+    "meal_type": "snack", "category": "fruits",
+    "ingredients": ["grapefruit"],
+    "energy_kcal": 80, "protein_g": 1.5, "fat_g": 0.2, "carbohydrate_g": 18.0,
+    "fiber_g": 2.5, "sodium_mg": 0.0, "sugar_g": 14.0, "prep_time": "5 min",
+    "notes_ar": "غني بفيتامين سي", "notes_en": "Rich in vitamin C",
+    "recipe_steps": ["اغسل الجريب فروت", "قطعه نصين", "كله بالمعلقة أو اعصره"],
+    "recipe_tips": "تحذير: الجريب فروت ممنوع مع بعض الأدوية - استشر طبيبك"
+  }
+]

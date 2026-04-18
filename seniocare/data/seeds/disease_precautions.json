@@ -1,0 +1,17 @@
+{
+  "DIS001": ["Call emergency services (123) immediately", "Do not give the person anything to eat or drink", "Note the time symptoms started", "Keep the person lying down with head slightly elevated"],
+  "DIS002": ["Call emergency services (123) immediately", "Have the person chew an aspirin if not allergic", "Keep the person calm and lying down", "Loosen any tight clothing"],
+  "DIS003": ["Call emergency services (123) immediately", "Use epinephrine auto-injector if available", "Lay the person flat with legs elevated"],
+  "DIS004": ["Seek medical attention promptly", "Rest and drink plenty of fluids", "Monitor temperature regularly"],
+  "DIS005": ["Seek immediate medical attention", "Do not massage the affected leg", "Keep the leg elevated"],
+  "DIS006": ["Consult a doctor for antibiotics", "Drink plenty of water", "Avoid caffeine and alcohol"],
+  "DIS007": ["Check blood sugar levels immediately", "Take prescribed diabetes medication", "Consult your doctor about adjusting treatment", "Stay hydrated"],
+  "DIS008": ["Seek medical attention immediately", "Take prescribed blood pressure medication", "Rest in a quiet place", "Avoid salt and stress"],
+  "DIS009": ["Rest the affected joints", "Apply warm or cold compresses", "Take prescribed anti-inflammatory medication"],
+  "DIS010": ["Stay hydrated with clear fluids", "Eat bland foods when able", "Rest and avoid dairy products"],
+  "DIS011": ["Rest and drink plenty of fluids", "Use over-the-counter cold remedies if appropriate", "Wash hands frequently to prevent spread"],
+  "DIS012": ["Avoid known allergens", "Use antihistamines as directed", "Keep windows closed during high pollen days"],
+  "DIS013": ["Drink water frequently", "Avoid caffeine and alcohol", "Eat water-rich fruits and vegetables"],
+  "DIS014": ["Maintain a regular sleep schedule", "Avoid screens before bedtime", "Create a comfortable sleep environment"],
+  "DIS015": ["Increase fiber intake gradually", "Drink plenty of water", "Exercise regularly", "Do not ignore the urge to have a bowel movement"]
+}
