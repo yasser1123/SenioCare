@@ -17,13 +17,13 @@ async def get_chat_history(user_id: str):
     so this endpoint only reads state metadata.
     """
     try:
-        sessions = await session_service.list_sessions(
+        response = await session_service.list_sessions(
             app_name="seniocare",
             user_id=user_id,
         )
 
         conversations = []
-        for session in sessions:
+        for session in response.sessions:
             # Skip internal profile-setup sessions
             if session.id.startswith("_profile_"):
                 continue
