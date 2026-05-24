@@ -19,6 +19,7 @@ _CUSTOM_PATHS = {
     "/set-user-profile/{user_id}",
     "/get-user-profile/{user_id}",
     "/sync-user-profile/{user_id}",
+    "/register-caregiver-fcm",
     "/reports/generate",
     "/reports/{user_id}",
     "/reports/{user_id}/{report_id}",

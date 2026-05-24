@@ -31,6 +31,15 @@ FIREBASE_CREDENTIALS_PATH = os.environ.get(
 )
 
 # =============================================================================
+# OLLAMA (LLM Model Server)
+# =============================================================================
+# Set OLLAMA_BASE_URL to point to a remote Ollama instance (e.g. Colab via ngrok).
+# When not set, LiteLLM defaults to http://localhost:11434 (local Ollama).
+
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", None)
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "ollama_chat/gemma4:e4b")
+
+# =============================================================================
 # SESSION DATABASE URL
 # =============================================================================
 # ADK's DatabaseSessionService requires the +asyncpg driver prefix.

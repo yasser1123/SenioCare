@@ -19,6 +19,7 @@ report in Egyptian Arabic that Flutter can render directly.
 
 from google.adk.agents import LlmAgent
 from google.adk.models.lite_llm import LiteLlm
+from seniocare.model import get_model
 
 
 REPORT_INSTRUCTION = """
@@ -130,7 +131,7 @@ RULES:
 
 report_agent = LlmAgent(
     name="report_agent",
-    model=LiteLlm(model="ollama_chat/gemma4:e4b"),
+    model=get_model(),
     instruction=REPORT_INSTRUCTION,
     description="Generates formatted health reports in Egyptian Arabic markdown from aggregated user data",
     output_key="report_result",

@@ -11,6 +11,7 @@ Formatter (Feature Agent is skipped in those cases).
 
 from google.adk.agents import LlmAgent
 from google.adk.models.lite_llm import LiteLlm
+from seniocare.model import get_model
 
 ORCHESTRATOR_INSTRUCTION = """
 ================================================================================
@@ -312,7 +313,7 @@ EMERGENCY_MESSAGE: [Urgent guidance: call emergency services, stay calm, first-a
 
 orchestrator_agent = LlmAgent(
     name="orchestrator_agent",
-    model=LiteLlm(model="ollama_chat/gemma4:e4b"),
+    model=get_model(),
     instruction=ORCHESTRATOR_INSTRUCTION,
     description="Evaluates safety, classifies intent, analyzes user profile, and creates a detailed task plan with tool references for the Feature Agent",
     output_key="orchestrator_result",

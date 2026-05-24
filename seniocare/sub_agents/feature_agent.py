@@ -11,6 +11,7 @@ to the Formatter without calling any tools.
 
 from google.adk.agents import LlmAgent
 from google.adk.models.lite_llm import LiteLlm
+from seniocare.model import get_model
 from seniocare.tools.nutrition import get_meal_options, get_meal_recipe
 from seniocare.tools.exercise import get_exercises
 from seniocare.tools.interactions import check_drug_food_interaction
@@ -306,7 +307,7 @@ SECTION 7: IMPORTANT RULES
 
 feature_agent = LlmAgent(
     name="feature_agent",
-    model=LiteLlm(model="ollama_chat/gemma4:e4b"),
+    model=get_model(),
     instruction=FEATURE_INSTRUCTION,
     description="Executes tool calls, decides best options, and prepares structured presentation data for the Formatter Agent",
     tools=[
