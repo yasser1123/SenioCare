@@ -5,7 +5,11 @@ import uuid
 from fastapi import APIRouter, HTTPException
 
 from app.config import session_service
-from app.schemas.profile import UserProfileRequest, PartialProfileUpdate
+from app.schemas.profile import (
+    UserProfileRequest,
+    PartialProfileUpdate,
+    CaregiverFCMRequest,
+)
 
 router = APIRouter(tags=["User Profile"])
 
@@ -15,6 +19,7 @@ _PROFILE_STATE_KEYS = [
     "user:weight", "user:height", "user:gender",
     "user:chronicDiseases", "user:allergies", "user:medications",
     "user:mobilityStatus", "user:bloodType", "user:caregiver_ids",
+    "user:caregivers",
 ]
 
 
@@ -47,6 +52,7 @@ async def set_user_profile(user_id: str, profile: UserProfileRequest):
                 "user:mobilityStatus":  profile.mobilityStatus,
                 "user:bloodType":       profile.bloodType,
                 "user:caregiver_ids":   profile.caregiver_ids,
+                "user:caregivers":      [c.model_dump() for c in profile.caregivers],
             }
         )
 
@@ -97,6 +103,7 @@ async def get_user_profile(user_id: str):
             "mobilityStatus":  session.state.get("user:mobilityStatus"),
             "bloodType":       session.state.get("user:bloodType"),
             "caregiver_ids":   session.state.get("user:caregiver_ids"),
+            "caregivers":      session.state.get("user:caregivers"),
             "preferences":     session.state.get("user:preferences"),
         }
 
@@ -140,6 +147,7 @@ async def sync_user_profile(user_id: str, updates: PartialProfileUpdate):
         if updates.mobilityStatus  is not None: state_updates["user:mobilityStatus"]  = updates.mobilityStatus
         if updates.bloodType       is not None: state_updates["user:bloodType"]       = updates.bloodType
         if updates.caregiver_ids   is not None: state_updates["user:caregiver_ids"]   = updates.caregiver_ids
+        if updates.caregivers      is not None: state_updates["user:caregivers"]      = [c.model_dump() for c in updates.caregivers]
         if updates.medications     is not None:
             state_updates["user:medications"] = [m.model_dump() for m in updates.medications]
 
@@ -167,3 +175,100 @@ async def sync_user_profile(user_id: str, updates: PartialProfileUpdate):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to sync profile: {e}")
+
+
+# =========================================================================
+# CAREGIVER FCM REGISTRATION
+# =========================================================================
+
+
+@router.post("/register-caregiver-fcm")
+async def register_caregiver_fcm(request: CaregiverFCMRequest):
+    """Register a caregiver's FCM token for push notifications about an elder.
+
+    Called by the caregiver's Flutter app after sign-in.
+    The caregiver provides:
+      - elder_user_id: which elder to receive notifications about
+      - caregiver_id: their own caregiver document ID
+      - name: their display name
+      - relationship: their relationship to the elder
+      - fcm_token: their device's Firebase Cloud Messaging token
+
+    The caregiver's info is stored in the elder's ADK session state under
+    user:caregivers as a list. If this caregiver already exists in the list,
+    their data (especially fcm_token) is updated. Otherwise they are appended.
+    """
+    try:
+        elder_user_id = request.elder_user_id
+
+        # Read the elder's current session state
+        temp_session_id = f"_fcm_reg_{uuid.uuid4().hex[:8]}"
+        session = await session_service.create_session(
+            app_name="seniocare",
+            user_id=elder_user_id,
+            session_id=temp_session_id,
+        )
+
+        # Get current caregivers list (or empty if none registered yet)
+        caregivers = session.state.get("user:caregivers", []) or []
+
+        # Build the new caregiver entry
+        new_caregiver = {
+            "caregiver_id": request.caregiver_id,
+            "name": request.name,
+            "relationship": request.relationship,
+            "fcm_token": request.fcm_token,
+        }
+
+        # Check if this caregiver already exists — update if so, append if not
+        updated = False
+        for i, cg in enumerate(caregivers):
+            if cg.get("caregiver_id") == request.caregiver_id:
+                caregivers[i] = new_caregiver
+                updated = True
+                break
+
+        if not updated:
+            caregivers.append(new_caregiver)
+
+        # Clean up the read session
+        await session_service.delete_session(
+            app_name="seniocare",
+            user_id=elder_user_id,
+            session_id=temp_session_id,
+        )
+
+        # Write the updated caregivers list back to the elder's state
+        write_session_id = f"_fcm_write_{uuid.uuid4().hex[:8]}"
+        await session_service.create_session(
+            app_name="seniocare",
+            user_id=elder_user_id,
+            session_id=write_session_id,
+            state={"user:caregivers": caregivers},
+        )
+        await session_service.delete_session(
+            app_name="seniocare",
+            user_id=elder_user_id,
+            session_id=write_session_id,
+        )
+
+        action = "updated" if updated else "registered"
+        print(
+            f"[FCM] Caregiver {request.name} ({request.relationship}) "
+            f"{action} for elder {elder_user_id}"
+        )
+
+        return {
+            "success": True,
+            "message": f"Caregiver {action} successfully",
+            "elder_user_id": elder_user_id,
+            "caregiver_id": request.caregiver_id,
+            "action": action,
+            "total_caregivers": len(caregivers),
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to register caregiver FCM: {e}",
+        )

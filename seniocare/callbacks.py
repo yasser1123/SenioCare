@@ -2,10 +2,12 @@
 Agent lifecycle callbacks for the SenioCare root agent.
 
 before_agent_callback  → populate_user_data   (profile loader + history builder)
-after_agent_callback   → auto_save_to_memory  (memory save + headline generator)
+after_agent_callback   → auto_save_to_memory  (memory save + headline generator + emergency report trigger)
 """
 
+import asyncio
 import re
+from datetime import datetime
 
 # =============================================================================
 # TEST USER (used when no backend has pushed a profile)
@@ -27,6 +29,14 @@ TEST_USER_PROFILE = {
     "user:mobilityStatus": "limited",
     "user:bloodType":      "A+",
     "user:caregiver_ids":  [],
+    "user:caregivers": [
+        {
+            "caregiver_id": "cg_test_001",
+            "name": "محمد (ابن)",
+            "relationship": "son",
+            "fcm_token": "test_fcm_token_placeholder",
+        }
+    ],
     "user:preferences": {
         "food_likes":       [],
         "food_dislikes":    [],
@@ -92,6 +102,10 @@ async def populate_user_data(callback_context):
             "general_likes":    [], "general_dislikes": [],
         }
 
+    # Ensure caregivers list exists
+    if not state.get("user:caregivers"):
+        state["user:caregivers"] = []
+
     # Track conversation turns (session-scoped)
     turn_count = state.get("conversation_turn_count", 0)
     state["conversation_turn_count"] = turn_count + 1
@@ -131,15 +145,17 @@ async def auto_save_to_memory(callback_context):
     """
     After each complete pipeline execution:
       1. Generate a conversation headline (first turn only) from the orchestrator's intent.
-      2. Save the session to long-term memory for cross-session recall.
+      2. Auto-trigger emergency report if EMERGENCY was detected.
+      3. Save the session to long-term memory for cross-session recall.
     """
     state = callback_context.state
 
     # --- Headline generation (first turn only) ---
+    orchestrator_output = state.get("orchestrator_result", "")
+    intent = _extract_intent(orchestrator_output)
+
     if state.get("conversation_turn_count") == 1 and not state.get("session_headline"):
         try:
-            orchestrator_output = state.get("orchestrator_result", "")
-            intent = _extract_intent(orchestrator_output)
             headline = INTENT_HEADLINES.get(intent, "💬 محادثة جديدة")
 
             session = callback_context._invocation_context.session
@@ -163,6 +179,10 @@ async def auto_save_to_memory(callback_context):
         except Exception as e:
             state["session_headline"] = "💬 محادثة جديدة"
             print(f"[SenioCare] Headline generation notice: {e}")
+
+    # --- Emergency report auto-trigger ---
+    if intent == "emergency":
+        await _trigger_emergency_report(state, orchestrator_output)
 
     # --- Memory auto-save ---
     try:
@@ -188,3 +208,89 @@ def _extract_intent(orchestrator_output: str) -> str:
     if match:
         return match.group(1).lower().strip()
     return "unknown"
+
+
+async def _trigger_emergency_report(state: dict, orchestrator_output: str) -> None:
+    """Auto-trigger an emergency report when the orchestrator detects an emergency.
+
+    Runs in the background so it doesn't block the user's chat response.
+    The user immediately sees the emergency guidance from the Formatter,
+    while the report is generated, stored, and caregivers are notified
+    asynchronously.
+    """
+    try:
+        user_id = state.get("user:user_id", "unknown")
+        user_name = state.get("user:user_name", "المستخدم")
+        caregivers = state.get("user:caregivers", []) or []
+
+        # Extract the user's message that triggered the emergency
+        emergency_message = orchestrator_output[:500]
+
+        emergency_context = {
+            "emergency_events": [{
+                "trigger": "chat_emergency_detected",
+                "message": emergency_message,
+                "timestamp": datetime.now().isoformat(),
+            }],
+            "conversation_topics": state.get("conversation_history", "").split("\n"),
+        }
+
+        # Fire-and-forget background task
+        asyncio.create_task(
+            _generate_and_notify_emergency(
+                user_id=user_id,
+                user_name=user_name,
+                emergency_context=emergency_context,
+                caregivers=caregivers,
+            )
+        )
+        print(f"[SenioCare] Emergency report + notification auto-triggered for {user_id}")
+
+    except Exception as e:
+        print(f"[SenioCare] Emergency report trigger failed: {e}")
+
+
+async def _generate_and_notify_emergency(
+    user_id: str,
+    user_name: str,
+    emergency_context: dict,
+    caregivers: list[dict],
+) -> None:
+    """Generate an emergency report and notify caregivers.
+
+    This runs as a background task via asyncio.create_task().
+    """
+    try:
+        from seniocare.tools.reports import generate_report
+
+        # Step 1: Generate the emergency report
+        result = await generate_report(
+            user_id=user_id,
+            report_type="emergency",
+            emergency_context=emergency_context,
+        )
+        report_id = result.get("report_id", "unknown")
+        print(f"[SenioCare] Emergency report generated: {report_id}")
+
+        # Step 2: Notify caregivers via FCM
+        if caregivers:
+            from app.notifications import notify_caregivers
+
+            notif_result = await notify_caregivers(
+                caregivers=caregivers,
+                elder_name=user_name,
+                report_type="emergency",
+                report_id=report_id,
+                report_summary="تم رصد حالة طوارئ أثناء المحادثة. اطلع على التقرير فوراً.",
+                elder_user_id=user_id,
+            )
+            print(
+                f"[SenioCare] 🔔 Emergency notifications: "
+                f"{notif_result.get('sent', 0)} sent, "
+                f"{notif_result.get('failed', 0)} failed"
+            )
+        else:
+            print(f"[SenioCare] ⚠️ No caregivers registered for {user_id} — skipping notification")
+
+    except Exception as e:
+        print(f"[SenioCare] Emergency report/notification failed: {e}")

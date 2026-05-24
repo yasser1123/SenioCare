@@ -228,7 +228,7 @@ SECTION 6: CRITICAL RULES
 
 formatter_agent = LlmAgent(
     name="formatter_agent",
-    model=LiteLlm(model="ollama_chat/llama3.1:8b"),
+    model=LiteLlm(model="ollama_chat/gemma4:e4b"),
     instruction=FORMATTER_INSTRUCTION,
     description="Formats final responses into warm Egyptian Arabic using structured templates with emoji headers. Handles normal, blocked, and emergency responses.",
     output_key="final_response",

@@ -30,6 +30,9 @@ env/
 # Environment Variables
 .env
 
+# Firebase service account key (contains private key — never commit)
+*-firebase-adminsdk*.json
+
 # IDEs
 .vscode/
 .idea/

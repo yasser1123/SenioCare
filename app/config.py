@@ -17,8 +17,18 @@ load_dotenv(override=True)
 # VERSION
 # =============================================================================
 
-APP_VERSION = "3.0.0"
+APP_VERSION = "3.1.0"
 APP_NAME = "seniocare"
+
+# =============================================================================
+# FIREBASE (Push Notifications)
+# =============================================================================
+
+FIREBASE_CREDENTIALS_PATH = os.environ.get(
+    "FIREBASE_CREDENTIALS_PATH",
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                 "seniocare-firebase-adminsdk.json"),
+)
 
 # =============================================================================
 # SESSION DATABASE URL

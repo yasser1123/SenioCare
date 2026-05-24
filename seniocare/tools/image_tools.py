@@ -1,113 +1,130 @@
-"""Image analysis tools — wraps the medication and report analyzers as ADK tools."""
+"""Image analysis storage tools — stores medical report results from Gemma 4 analysis.
+
+Gemma 4 handles image analysis natively via run_sse (text + image in one prompt).
+These tools are ONLY for storing structured results to the database after the
+model has already analyzed the image.
+"""
+
+import json
+import uuid
+from datetime import datetime
 
 from google.adk.tools import ToolContext
+from seniocare.data.database import get_connection
 
 
-async def analyze_medication_image_tool(
-    image_base64: str,
+async def store_medical_report(
+    report_type: str,
+    key_findings: list,
+    lab_values: dict,
+    health_summary: str,
+    severity_level: str,
+    recommendations: list,
     tool_context: ToolContext,
 ) -> dict:
-    """
-    Analyze a medication box/package image to extract medication info.
+    """Store analyzed medical report results in the database.
 
-    Uses OCR AI (richardyoung/olmocr2:7b-q8) to extract:
-    - Medication name
-    - Active ingredient
-    - Dose / concentration
+    Called by the Feature Agent AFTER Gemma 4 has analyzed a medical
+    report image. The model extracts the data, this tool stores it.
 
     Args:
-        image_base64: Base64 encoded image of the medication box.
+        report_type: Type of report (blood_test, x_ray, prescription, etc.)
+        key_findings: List of important findings from the report.
+        lab_values: Dict of test names to values with units.
+        health_summary: AI-generated plain-language health evaluation.
+        severity_level: NORMAL, ATTENTION, or CRITICAL.
+        recommendations: List of actionable recommendations.
         tool_context: The tool context for state access.
 
     Returns:
-        dict: Extracted medication information (name, active_ingredient, dosage).
+        dict: Confirmation with report_id and storage status.
     """
     # Prevent multiple calls in the same turn
-    if tool_context.state.get("_medication_image_tool_called"):
+    if tool_context.state.get("_store_report_tool_called"):
         return {
             "status": "already_called",
-            "message": "تم تحليل صورة الدواء بالفعل. استخدم النتيجة السابقة.",
+            "message": "تم حفظ التقرير الطبي بالفعل. استخدم النتيجة السابقة.",
         }
-    tool_context.state["_medication_image_tool_called"] = True
+    tool_context.state["_store_report_tool_called"] = True
 
     user_id = tool_context.state.get("user:user_id", "unknown")
+    report_id = f"RPT_{uuid.uuid4().hex[:12]}"
 
-    from seniocare.image_analysis.medication_analyzer import analyze_medication_image
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
 
-    result = await analyze_medication_image(
-        image_base64=image_base64,
-        user_id=user_id,
-    )
+        cursor.execute(
+            """
+            INSERT INTO medical_reports
+            (report_id, user_id, report_type, report_date, key_findings,
+             lab_values, health_summary, severity_level, recommendations,
+             scanned_at, raw_response)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (report_id) DO NOTHING
+            """,
+            (
+                report_id,
+                user_id,
+                report_type,
+                datetime.now().strftime("%Y-%m-%d"),
+                json.dumps(key_findings, ensure_ascii=False),
+                json.dumps(lab_values, ensure_ascii=False),
+                health_summary,
+                severity_level,
+                json.dumps(recommendations, ensure_ascii=False),
+                datetime.now().isoformat(),
+                "",  # raw_response not needed — Gemma 4 handles inline
+            ),
+        )
 
-    if result.success:
+        conn.commit()
+        conn.close()
+
         return {
             "status": "success",
-            "medication_name": result.medication_name,
-            "active_ingredient": result.active_ingredient,
-            "dosage": result.dosage,
-            "manufacturer": result.manufacturer,
-            "expiry_date": result.expiry_date,
+            "report_id": report_id,
+            "message": f"تم حفظ التقرير الطبي بنجاح (ID: {report_id})",
+            "severity_level": severity_level,
+            "stored_in_db": True,
         }
-    else:
+
+    except Exception as e:
         return {
             "status": "error",
-            "error_message": result.error,
+            "error_message": str(e),
+            "stored_in_db": False,
         }
 
 
-async def analyze_medical_report_tool(
-    image_base64: str,
-    tool_context: ToolContext,
-) -> dict:
-    """
-    Analyze a medical report image to extract and evaluate health data.
-
-    Uses vision AI (llama3.2-vision) for two-pass analysis:
-    1. Extract structured data (lab values, findings, report type)
-    2. Evaluate health situation with severity classification
-
-    Results are stored in the database for historical tracking.
+def get_user_medical_reports(user_id: str) -> list[dict]:
+    """Retrieve all previously analyzed medical reports for a user.
 
     Args:
-        image_base64: Base64 encoded image of the medical report.
-        tool_context: The tool context for state access.
+        user_id: The user's identifier.
 
     Returns:
-        dict: Full report analysis with health summary, severity, and recommendations.
+        List of report records from the database.
     """
-    # Prevent multiple calls in the same turn
-    if tool_context.state.get("_medical_report_tool_called"):
-        return {
-            "status": "already_called",
-            "message": "تم تحليل التقرير الطبي بالفعل. استخدم النتيجة السابقة.",
-        }
-    tool_context.state["_medical_report_tool_called"] = True
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM medical_reports WHERE user_id = %s ORDER BY scanned_at DESC",
+            (user_id,),
+        )
+        rows = cursor.fetchall()
+        conn.close()
 
-    user_id = tool_context.state.get("user:user_id", "unknown")
+        reports = []
+        for row in rows:
+            row = dict(row)
+            row["key_findings"] = json.loads(row.get("key_findings", "[]"))
+            row["lab_values"] = json.loads(row.get("lab_values", "{}"))
+            row["recommendations"] = json.loads(row.get("recommendations", "[]"))
+            reports.append(row)
 
-    from seniocare.image_analysis.report_analyzer import analyze_medical_report
+        return reports
 
-    result = await analyze_medical_report(
-        image_base64=image_base64,
-        user_id=user_id,
-    )
-
-    if result.success:
-        return {
-            "status": "success",
-            "report_id": result.report_id,
-            "report_type": result.report_type,
-            "report_date": result.report_date,
-            "key_findings": result.key_findings,
-            "lab_values": result.lab_values,
-            "health_summary": result.health_summary,
-            "severity_level": result.severity_level,
-            "recommendations": result.recommendations,
-            "safety_disclaimers": result.safety_disclaimers,
-            "stored_in_db": result.stored_in_db,
-        }
-    else:
-        return {
-            "status": "error",
-            "error_message": result.error,
-        }
+    except Exception:
+        return []

@@ -19,9 +19,10 @@ _CUSTOM_PATHS = {
     "/set-user-profile/{user_id}",
     "/get-user-profile/{user_id}",
     "/sync-user-profile/{user_id}",
-    "/analyze-medication-image",
-    "/analyze-medical-report",
-    "/user-medical-reports/{user_id}",
+    "/reports/generate",
+    "/reports/{user_id}",
+    "/reports/{user_id}/{report_id}",
+    "/reports/medical/{user_id}",
 }
 
 # ADK paths we document manually (their models crash schema generation)
@@ -134,7 +135,7 @@ _TAG_ORDER = [
     {"name": "Sessions",        "description": "Conversation session management"},
     {"name": "Chat History",    "description": "Conversation history with headlines"},
     {"name": "User Profile",    "description": "Push/pull user health profile data"},
-    {"name": "Image Analysis",  "description": "AI-powered medication and medical report image analysis"},
+    {"name": "Health Reports",  "description": "AI-generated health reports and medical report history"},
     {"name": "Agent",           "description": "Send messages to the SenioCare AI agent"},
 ]
 

@@ -19,7 +19,8 @@ from google.adk.cli.fast_api import get_fast_api_app
 
 from app.config import SESSION_DB, MEMORY_SERVICE_URI, ALLOWED_ORIGINS, SERVE_WEB_INTERFACE, APP_VERSION
 from app.openapi import make_custom_openapi
-from app.routers import health, sessions, chat_history, user_profile, image_analysis
+from app.routers import health, sessions, chat_history, user_profile, reports
+from app.scheduler import setup_scheduler, shutdown_scheduler
 
 load_dotenv(override=True)
 
@@ -53,7 +54,28 @@ app.include_router(health.router)
 app.include_router(sessions.router)
 app.include_router(chat_history.router)
 app.include_router(user_profile.router)
-app.include_router(image_analysis.router)
+app.include_router(reports.router)
+
+# =============================================================================
+# LIFECYCLE — Scheduler
+# =============================================================================
+
+@app.on_event("startup")
+async def startup_event():
+    """Start the report generation scheduler and Firebase on app boot."""
+    setup_scheduler()
+    # Initialize Firebase for push notifications
+    try:
+        from app.notifications import init_firebase
+        init_firebase()
+    except Exception as e:
+        print(f"[Startup] Firebase init warning: {e}")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Gracefully stop the scheduler."""
+    shutdown_scheduler()
+
 
 # =============================================================================
 # ENTRY POINT
@@ -89,14 +111,20 @@ if __name__ == "__main__":
     POST /set-user-profile/{{user_id}}  - Push user profile
     GET  /get-user-profile/{{user_id}}  - Get user profile
     POST /sync-user-profile/{{user_id}} - Sync profile changes
-    POST /analyze-medication-image - Medication OCR (olmocr2)
-    POST /analyze-medical-report   - Report analysis (llama3.2)
-    GET  /user-medical-reports/{{user_id}} - Report history
+    POST /register-caregiver-fcm     - Register caregiver FCM token
+    POST /reports/generate          - Generate health report
+    GET  /reports/{{user_id}}          - List user reports
+    GET  /reports/{{user_id}}/{{report_id}} - Report detail
+    GET  /reports/medical/{{user_id}}   - Medical image reports
+
     GET  /health              - Health check
     GET  /docs                - Swagger UI
 
   Session DB : {db_label}
   Memory     : {mem_label}
+  Scheduler  : Daily 23:00 | Weekly Sun 23:00 | Monthly 1st 23:00
+  Emergency  : Auto-trigger + FCM notification to caregivers
+  FCM        : Firebase push notifications enabled
 ==============================================================
     """)
 
