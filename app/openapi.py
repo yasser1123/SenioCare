@@ -283,93 +283,47 @@ _REPORT_PATHS_MANUAL = {
             },
         }
     },
-    "/reports/medical/{user_id}": {
-        "get": {
-            "tags": ["Health Reports"],
-            "summary": "Get Medical Image Reports",
-            "description": (
-                "List all analyzed medical reports from image analysis for a user. "
-                "Reads from database — does NOT invoke the AI model."
-            ),
-            "parameters": [
-                {"name": "user_id", "in": "path", "required": True, "schema": {"type": "string", "example": "elder_123"}},
-            ],
-            "responses": {
-                "200": {
-                    "description": "List of analyzed medical report records",
-                    "content": {
-                        "application/json": {
-                            "example": {
-                                "success": True,
-                                "user_id": "elder_123",
-                                "count": 1,
-                                "reports": [
-                                    {
-                                        "report_id": "MR_abc123",
-                                        "user_id": "elder_123",
-                                        "report_type": "blood_test",
-                                        "report_date": "2026-05-20",
-                                        "key_findings": "Glucose: 150 mg/dL (elevated), HbA1c: 7.2%",
-                                        "lab_values": "[{\"name\": \"Glucose\", \"value\": \"150\", \"unit\": \"mg/dL\", \"status\": \"high\"}]",
-                                        "health_summary": "Elevated blood sugar levels consistent with diabetes management",
-                                        "severity_level": "moderate",
-                                        "recommendations": "Continue Metformin, monitor fasting glucose",
-                                        "scanned_at": "2026-05-20T14:30:00",
-                                    }
-                                ],
-                            }
-                        }
-                    },
-                }
-            },
-        }
-    },
-    "/reports/seed": {
-        "post": {
-            "tags": ["Health Reports"],
-            "summary": "Seed Test Data",
-            "description": (
-                "Inject sample health reports and medical reports into the database for testing. "
-                "Call this ONCE to populate test data, then use the list/detail endpoints.\n\n"
-                "**Does NOT invoke the AI model.** Fast response.\n\n"
-                "After seeding, test with:\n"
-                "- `GET /reports/{user_id}` — list all seeded reports\n"
-                "- `GET /reports/{user_id}/HR_seed_daily_001` — daily report detail\n"
-                "- `GET /reports/{user_id}/HR_seed_weekly_001` — weekly report detail\n"
-                "- `GET /reports/{user_id}/HR_seed_monthly_001` — monthly report detail\n"
-                "- `GET /reports/{user_id}/HR_seed_emergency_001` — emergency report detail\n"
-                "- `GET /reports/medical/{user_id}` — medical image reports"
-            ),
-            "parameters": [
-                {"name": "user_id", "in": "query", "required": False, "schema": {"type": "string", "default": "elder_123"}},
-                {"name": "clear", "in": "query", "required": False, "schema": {"type": "boolean", "default": False}},
-            ],
-            "responses": {
-                "200": {
-                    "description": "Seed data inserted",
-                    "content": {
-                        "application/json": {
-                            "example": {
-                                "success": True,
-                                "user_id": "elder_123",
-                                "cleared_existing": False,
-                                "health_reports_inserted": 4,
-                                "medical_reports_inserted": 2,
-                                "test_endpoints": {
-                                    "list_reports": "/reports/elder_123",
-                                    "daily_detail": "/reports/elder_123/HR_seed_daily_001",
-                                    "weekly_detail": "/reports/elder_123/HR_seed_weekly_001",
-                                    "monthly_detail": "/reports/elder_123/HR_seed_monthly_001",
-                                    "emergency_detail": "/reports/elder_123/HR_seed_emergency_001",
-                                    "medical_reports": "/reports/medical/elder_123",
-                                },
-                            }
-                        }
-                    },
-                }
-            },
-        }
-    },
+    # "/reports/medical/{user_id}": {
+    #     "get": {
+    #         "tags": ["Health Reports"],
+    #         "summary": "Get Medical Image Reports",
+    #         "description": (
+    #             "List all analyzed medical reports from image analysis for a user. "
+    #             "Reads from database — does NOT invoke the AI model."
+    #         ),
+    #         "parameters": [
+    #             {"name": "user_id", "in": "path", "required": True, "schema": {"type": "string", "example": "elder_123"}},
+    #         ],
+    #         "responses": {
+    #             "200": {
+    #                 "description": "List of analyzed medical report records",
+    #                 "content": {
+    #                     "application/json": {
+    #                         "example": {
+    #                             "success": True,
+    #                             "user_id": "elder_123",
+    #                             "count": 1,
+    #                             "reports": [
+    #                                 {
+    #                                     "report_id": "MR_abc123",
+    #                                     "user_id": "elder_123",
+    #                                     "report_type": "blood_test",
+    #                                     "report_date": "2026-05-20",
+    #                                     "key_findings": "Glucose: 150 mg/dL (elevated), HbA1c: 7.2%",
+    #                                     "lab_values": "[{\"name\": \"Glucose\", \"value\": \"150\", \"unit\": \"mg/dL\", \"status\": \"high\"}]",
+    #                                     "health_summary": "Elevated blood sugar levels consistent with diabetes management",
+    #                                     "severity_level": "moderate",
+    #                                     "recommendations": "Continue Metformin, monitor fasting glucose",
+    #                                     "scanned_at": "2026-05-20T14:30:00",
+    #                                 }
+    #                             ],
+    #                         }
+    #                     }
+    #                 },
+    #             }
+    #         },
+    #     }
+    # },
 }
 
 
