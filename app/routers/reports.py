@@ -1,10 +1,11 @@
 """Health report router — generate, list, and view AI health reports.
 
 Endpoints:
-  POST /reports/generate          — Trigger report generation
-  GET  /reports/{user_id}         — List all reports for a user
-  GET  /reports/{user_id}/{report_id} — Get single report detail
-  GET  /reports/medical/{user_id} — Get analyzed medical reports (images)
+  POST /reports/generate          — Trigger report generation (AI model)
+  POST /reports/seed              — Inject sample test data (no model needed)
+  GET  /reports/{user_id}         — List all reports for a user (DB read)
+  GET  /reports/{user_id}/{report_id} — Get single report detail (DB read)
+  GET  /reports/medical/{user_id} — Get analyzed medical reports (DB read)
 """
 
 import uuid
@@ -218,3 +219,51 @@ async def get_medical_reports(user_id: str):
         "count": len(reports),
         "reports": reports,
     }
+
+
+@router.post("/seed")
+async def seed_test_data(user_id: str = "elder_123", clear: bool = False):
+    """Inject sample test data into the database for testing.
+
+    Call this once to populate the database with realistic Arabic
+    health reports and medical reports. After seeding, you can test:
+      - GET /reports/{user_id}
+      - GET /reports/{user_id}/{report_id}
+      - GET /reports/medical/{user_id}
+
+    WITHOUT needing the AI model to be running.
+
+    Args:
+        user_id: User ID to seed data for (default: elder_123).
+        clear: If true, deletes existing seed data before inserting.
+
+    Returns:
+        Summary of seeded data with report IDs for testing.
+    """
+    try:
+        from seed_reports import seed_health_reports, seed_medical_reports
+
+        health_count = seed_health_reports(user_id, clear=clear)
+        medical_count = seed_medical_reports(user_id, clear=clear)
+
+        return {
+            "success": True,
+            "user_id": user_id,
+            "cleared_existing": clear,
+            "health_reports_inserted": health_count,
+            "medical_reports_inserted": medical_count,
+            "test_endpoints": {
+                "list_reports": f"/reports/{user_id}",
+                "daily_detail": f"/reports/{user_id}/HR_seed_daily_001",
+                "weekly_detail": f"/reports/{user_id}/HR_seed_weekly_001",
+                "monthly_detail": f"/reports/{user_id}/HR_seed_monthly_001",
+                "emergency_detail": f"/reports/{user_id}/HR_seed_emergency_001",
+                "medical_reports": f"/reports/medical/{user_id}",
+            },
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Seeding failed: {str(e)}",
+        )
