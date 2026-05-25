@@ -37,11 +37,9 @@ _REPORT_PATHS_MANUAL = {
                 "The report agent aggregates user profile, conversation history, and "
                 "medical reports from the database, then produces a markdown report. "
                 "The report is stored in the DB and returned.\n\n"
-                "**Note:** This endpoint invokes the AI model and may take 30-90 seconds "
                 "to respond depending on model load.\n\n"
                 "**For testing without the model:** Use `GET /reports/{user_id}` and "
-                "`GET /reports/{user_id}/{report_id}` which read from DB directly "
-                "(seed data available via `python seed_reports.py`)."
+                "`GET /reports/{user_id}/{report_id}` "
             ),
             "requestBody": {
                 "required": True,

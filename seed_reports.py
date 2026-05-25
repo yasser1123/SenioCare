@@ -270,7 +270,7 @@ def seed_health_reports(user_id: str, clear: bool = False) -> int:
 
     if clear:
         cursor.execute(
-            "DELETE FROM health_reports WHERE report_id LIKE 'HR_seed_%' AND user_id = %s",
+            "DELETE FROM health_reports WHERE report_id LIKE 'HR_seed_%%' AND user_id = %s",
             (user_id,),
         )
         print(f"  Cleared existing seed health reports for {user_id}")
@@ -322,7 +322,7 @@ def seed_medical_reports(user_id: str, clear: bool = False) -> int:
 
     if clear:
         cursor.execute(
-            "DELETE FROM medical_reports WHERE report_id LIKE 'MR_seed_%' AND user_id = %s",
+            "DELETE FROM medical_reports WHERE report_id LIKE 'MR_seed_%%' AND user_id = %s",
             (user_id,),
         )
         print(f"  Cleared existing seed medical reports for {user_id}")
