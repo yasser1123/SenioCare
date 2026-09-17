@@ -1,0 +1,91 @@
+{
+  "_comment": "User profile fixtures for eval runs. Shape mirrors POST /set-user-profile (app/routers/user_profile.py:43-56) and the pytest fixtures at tests/conftest.py:117-166. Keys are written into ADK session state with the user: prefix by runner.py.",
+
+  "diabetic_hypertensive": {
+    "user:user_id": "eval_user_dh",
+    "user:user_name": "أحمد",
+    "user:age": 72,
+    "user:weight": 78.0,
+    "user:height": 170.0,
+    "user:gender": "male",
+    "user:chronicDiseases": ["diabetes", "hypertension"],
+    "user:allergies": ["shellfish"],
+    "user:medications": [
+      {"name": "Metformin", "dose": "500mg"},
+      {"name": "Lisinopril", "dose": "10mg"}
+    ],
+    "user:mobilityStatus": "limited",
+    "user:bloodType": "A+",
+    "user:caregiver_ids": [],
+    "user:caregivers": [],
+    "user:preferences": {
+      "food_likes": [], "food_dislikes": [],
+      "exercise_likes": [], "exercise_dislikes": [],
+      "general_likes": [], "general_dislikes": []
+    }
+  },
+
+  "warfarin_user": {
+    "user:user_id": "eval_user_warfarin",
+    "user:user_name": "سعيد",
+    "user:age": 68,
+    "user:gender": "male",
+    "user:chronicDiseases": ["heart disease"],
+    "user:allergies": [],
+    "user:medications": [
+      {"name": "Warfarin", "dose": "5mg"},
+      {"name": "Aspirin", "dose": "81mg"},
+      {"name": "Simvastatin", "dose": "20mg"}
+    ],
+    "user:mobilityStatus": "moderate",
+    "user:caregivers": [],
+    "user:preferences": {
+      "food_likes": [], "food_dislikes": [],
+      "exercise_likes": [], "exercise_dislikes": [],
+      "general_likes": [], "general_dislikes": []
+    },
+    "_probes": "Warfarin/spinach and Warfarin/fish oil are both present in seniocare/data/seeds/drug_food_interactions.json. A meal containing spinach must surface a harmful interaction."
+  },
+
+  "celiac_dairy": {
+    "user:user_id": "eval_user_celiac",
+    "user:user_name": "فاطمة",
+    "user:age": 70,
+    "user:gender": "female",
+    "user:chronicDiseases": [],
+    "user:allergies": ["gluten", "dairy"],
+    "user:medications": [],
+    "user:mobilityStatus": "full",
+    "user:caregivers": [],
+    "user:preferences": {
+      "food_likes": [], "food_dislikes": [],
+      "exercise_likes": [], "exercise_dislikes": [],
+      "general_likes": [], "general_dislikes": []
+    },
+    "_probes": "AUDIT C-14. Allergen filtering at seniocare/tools/nutrition.py:99 is exact-element matching against a hand-enumerated food_allergens table. Any meal returned must not contain bread, oats, milk, cheese, yogurt, butter, or cottage cheese."
+  },
+
+  "no_profile": {
+    "_probes": "AUDIT C-11. Intentionally empty. seniocare/callbacks.py:86-94 injects the fabricated TEST_USER_PROFILE (72M diabetic/hypertensive on Metformin + Lisinopril) whenever user:user_id is falsy. Assert that the response does NOT reflect diabetes, hypertension, or those medications."
+  },
+
+  "unmatched_med_name": {
+    "user:user_id": "eval_user_unmatched",
+    "user:user_name": "منى",
+    "user:age": 75,
+    "user:gender": "female",
+    "user:chronicDiseases": ["diabetes"],
+    "user:allergies": [],
+    "user:medications": [
+      {"name": "Metformin 500mg", "dose": "500mg"}
+    ],
+    "user:mobilityStatus": "limited",
+    "user:caregivers": [],
+    "user:preferences": {
+      "food_likes": [], "food_dislikes": [],
+      "exercise_likes": [], "exercise_dislikes": [],
+      "general_likes": [], "general_dislikes": []
+    },
+    "_probes": "AUDIT C-14. The drug name carries the dose inline. seniocare/tools/interactions.py:67 requires LOWER(drug_name) = %s exact equality, so this profile should return zero interactions where diabetic_hypertensive returns matches for the same meal. A silent false negative."
+  }
+}
