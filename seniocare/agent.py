@@ -20,8 +20,13 @@ from seniocare.sub_agents.formatter_agent import formatter_agent
 from seniocare.callbacks import populate_user_data, auto_save_to_memory
 from seniocare.data.database import _initialize_database as _init_db
 
-# Initialize cloud DB tables on startup (idempotent)
-_init_db()
+# Initialize cloud DB tables on startup (idempotent).
+# Guarded so importing this module (tests, CI, adk web without a configured
+# DB) never crashes — the first actual DB query raises a clear error instead.
+try:
+    _init_db()
+except Exception as e:
+    print(f"[SenioCare] Database initialization deferred: {e}")
 
 # =============================================================================
 # ROOT AGENT

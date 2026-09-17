@@ -20,8 +20,13 @@ import json
 import os
 from pathlib import Path
 
-import psycopg2
-from psycopg2.extras import RealDictCursor
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+except ImportError:
+    psycopg2 = None
+    RealDictCursor = None
+
 from dotenv import load_dotenv
 
 # ---------------------------------------------------------------------------
@@ -32,16 +37,26 @@ _project_root = Path(__file__).resolve().parents[2]
 load_dotenv(_project_root / ".env")
 
 DATABASE_URL = os.environ.get("APP_DATABASE_URL", "")
-if not DATABASE_URL:
-    raise RuntimeError(
-        "APP_DATABASE_URL is not set. Add it to the root .env file.\n"
-        "Example: APP_DATABASE_URL=postgresql://user:pass@host/db?sslmode=require"
-    )
 
 _SEEDS_DIR = Path(__file__).parent / "seeds"
 
 # Track whether tables have been initialized this process
 _initialized = False
+
+
+def _require_database_url() -> str:
+    """Return DATABASE_URL or raise a clear error (called lazily, not at import)."""
+    if psycopg2 is None:
+        raise RuntimeError(
+            "psycopg2 is not installed. Install psycopg2-binary to use PostgreSQL database features."
+        )
+    db_url = os.environ.get("APP_DATABASE_URL", "") or DATABASE_URL
+    if not db_url:
+        raise RuntimeError(
+            "APP_DATABASE_URL is not set. Add it to the root .env file.\n"
+            "Example: APP_DATABASE_URL=postgresql://user:pass@host/db?sslmode=require"
+        )
+    return db_url
 
 
 # ---------------------------------------------------------------------------
@@ -50,8 +65,12 @@ _initialized = False
 
 
 def get_connection() -> psycopg2.extensions.connection:
-    """Return a new psycopg2 connection using RealDictCursor."""
-    return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    """Return a new psycopg2 connection using RealDictCursor (retries once on transient SSL/network drop)."""
+    url = _require_database_url()
+    try:
+        return psycopg2.connect(url, cursor_factory=RealDictCursor)
+    except psycopg2.OperationalError:
+        return psycopg2.connect(url, cursor_factory=RealDictCursor)
 
 
 # ---------------------------------------------------------------------------
@@ -65,7 +84,7 @@ def _initialize_database() -> None:
     if _initialized:
         return
 
-    conn = psycopg2.connect(DATABASE_URL)
+    conn = psycopg2.connect(_require_database_url())
     cursor = conn.cursor()
 
     try:
@@ -334,7 +353,7 @@ def _seed_exercises(cursor) -> None:
 
 def reset_database() -> None:
     """Drop and recreate all tables. Use only in testing/dev environments."""
-    conn = psycopg2.connect(DATABASE_URL)
+    conn = psycopg2.connect(_require_database_url())
     cursor = conn.cursor()
     try:
         tables = [

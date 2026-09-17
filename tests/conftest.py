@@ -90,8 +90,15 @@ except ImportError:
     sys.modules.setdefault("httpx", _mock_httpx)
 
 
+# ---------------------------------------------------------------------------
+# Test database URL check (must happen BEFORE database import)
+# ---------------------------------------------------------------------------
+_TEST_DB_URL = os.environ.get("TEST_DATABASE_URL", "")
+if _TEST_DB_URL:
+    os.environ["APP_DATABASE_URL"] = _TEST_DB_URL
+
 # Now safe to import seniocare modules
-from seniocare.data.database import get_connection, reset_database, DB_PATH  # noqa: E402
+from seniocare.data.database import get_connection, reset_database  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -99,15 +106,10 @@ from seniocare.data.database import get_connection, reset_database, DB_PATH  # n
 # ---------------------------------------------------------------------------
 @pytest.fixture(scope="session", autouse=True)
 def setup_database():
-    """Create a fresh test database before tests, remove after."""
-    reset_database()
+    """Reset the test database once per run if TEST_DATABASE_URL is provided."""
+    if _TEST_DB_URL:
+        reset_database()
     yield
-    if os.path.exists(DB_PATH):
-        os.remove(DB_PATH)
-    for ext in ["-wal", "-shm"]:
-        path = DB_PATH + ext
-        if os.path.exists(path):
-            os.remove(path)
 
 
 # ---------------------------------------------------------------------------

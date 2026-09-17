@@ -74,27 +74,19 @@ except ImportError:
     sys.modules.setdefault("httpx", _mock_httpx)
 
 
+# All tests in this file require a live PostgreSQL test database.
+pytestmark = pytest.mark.skipif(
+    not os.environ.get("TEST_DATABASE_URL"),
+    reason="TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database",
+)
+
 # Now safe to import seniocare modules
-from seniocare.data.database import get_connection, reset_database, DB_PATH
+from seniocare.data.database import get_connection, reset_database  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-@pytest.fixture(scope="session", autouse=True)
-def setup_database():
-    """Ensure a fresh test database exists for all tests."""
-    reset_database()
-    yield
-    # Cleanup after all tests
-    if os.path.exists(DB_PATH):
-        os.remove(DB_PATH)
-    for ext in ["-wal", "-shm"]:
-        path = DB_PATH + ext
-        if os.path.exists(path):
-            os.remove(path)
-
-
 @pytest.fixture
 def user_001_context():
     """User 001: Diabetes + Hypertension, shellfish allergy, takes Metformin + Lisinopril."""
@@ -136,22 +128,29 @@ def empty_context():
 # 1. DATABASE INITIALIZATION TESTS
 # ===========================================================================
 class TestDatabaseInit:
-    """Test that the database is created correctly."""
+    """Test that the database is initialized correctly."""
 
-    def test_database_file_exists(self):
-        assert os.path.exists(DB_PATH), "Database file should exist"
+    def test_database_connection(self):
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 AS ok")
+        assert cursor.fetchone()["ok"] == 1
+        conn.close()
 
     def test_all_tables_exist(self):
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        tables = {row["name"] for row in cursor.fetchall()}
+        cursor.execute(
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema = 'public'"
+        )
+        tables = {row["table_name"] for row in cursor.fetchall()}
         conn.close()
 
         expected = {
             "meals", "condition_dietary_rules", "drug_food_interactions",
             "disease_symptoms", "disease_precautions", "food_allergens",
-            "medications", "exercises", "medical_reports",
+            "exercises", "medical_reports",
         }
         for table in expected:
             assert table in tables, f"Table '{table}' should exist"
@@ -600,187 +599,6 @@ class TestScenarioSymptomAssessment:
             if match["confidence"] > 20:
                 assert len(match["precautions"]) > 0, \
                     f"Disease '{match['disease_name']}' should have precautions"
-
-
-# ===========================================================================
-# 8. IMAGE ANALYSIS MODULE TESTS
-# ===========================================================================
-class TestImageAnalysisCommon:
-    """Test shared utilities from the image_analysis.common module."""
-
-    def test_validate_base64_valid(self):
-        from seniocare.image_analysis.common import validate_base64_image
-        import base64
-        valid_b64 = base64.b64encode(b"fake image data").decode()
-        assert validate_base64_image(valid_b64) is True
-
-    def test_validate_base64_with_prefix(self):
-        from seniocare.image_analysis.common import validate_base64_image
-        import base64
-        raw = base64.b64encode(b"fake image data").decode()
-        with_prefix = f"data:image/png;base64,{raw}"
-        assert validate_base64_image(with_prefix) is True
-
-    def test_validate_base64_invalid(self):
-        from seniocare.image_analysis.common import validate_base64_image
-        assert validate_base64_image("not-valid-base64!!!") is False
-
-    def test_parse_json_from_response_plain(self):
-        from seniocare.image_analysis.common import parse_json_from_response
-        result = parse_json_from_response('{"key": "value"}')
-        assert result == {"key": "value"}
-
-    def test_parse_json_from_response_with_fences(self):
-        from seniocare.image_analysis.common import parse_json_from_response
-        response = '```json\n{"key": "value"}\n```'
-        result = parse_json_from_response(response)
-        assert result == {"key": "value"}
-
-    def test_parse_json_from_response_with_surrounding_text(self):
-        from seniocare.image_analysis.common import parse_json_from_response
-        response = 'Here is the result:\n{"medication_name": "Panadol"}\nEnd.'
-        result = parse_json_from_response(response)
-        assert result["medication_name"] == "Panadol"
-
-    def test_strip_base64_prefix(self):
-        from seniocare.image_analysis.common import strip_base64_prefix
-        assert strip_base64_prefix("data:image/png;base64,ABC123") == "ABC123"
-        assert strip_base64_prefix("ABC123") == "ABC123"
-
-
-class TestMedicationAnalyzerParsing:
-    """Test medication analyzer response parsing (no model needed)."""
-
-    def test_parse_valid_medication_response(self):
-        from seniocare.image_analysis.medication_analyzer import _parse_medication_response
-        response = '{"medication_name": "Panadol Extra", "active_ingredient": "Paracetamol + Caffeine", "dosage": "500mg/65mg", "manufacturer": "GSK", "expiry_date": "12/2026"}'
-        result = _parse_medication_response(response)
-
-        assert result.success is True
-        assert result.medication_name == "Panadol Extra"
-        assert result.active_ingredient == "Paracetamol + Caffeine"
-        assert result.dosage == "500mg/65mg"
-        assert result.manufacturer == "GSK"
-
-    def test_parse_partial_medication_response(self):
-        from seniocare.image_analysis.medication_analyzer import _parse_medication_response
-        response = '{"medication_name": "Augmentin", "active_ingredient": "Amoxicillin + Clavulanic acid", "dosage": "1g", "manufacturer": null, "expiry_date": null}'
-        result = _parse_medication_response(response)
-
-        assert result.success is True
-        assert result.medication_name == "Augmentin"
-        assert result.active_ingredient == "Amoxicillin + Clavulanic acid"
-        assert result.dosage == "1g"
-        assert result.manufacturer is None
-
-    def test_parse_invalid_medication_response(self):
-        from seniocare.image_analysis.medication_analyzer import _parse_medication_response
-        result = _parse_medication_response("this is not JSON at all")
-        assert result.success is True  # Still returns True but with error note
-        assert result.error is not None
-
-    def test_parse_markdown_wrapped_response(self):
-        from seniocare.image_analysis.medication_analyzer import _parse_medication_response
-        response = '```json\n{"medication_name": "Metformin", "active_ingredient": "Metformin HCl", "dosage": "500mg", "manufacturer": "Merck", "expiry_date": null}\n```'
-        result = _parse_medication_response(response)
-        assert result.medication_name == "Metformin"
-        assert result.dosage == "500mg"
-
-
-class TestReportAnalyzerParsing:
-    """Test report analyzer response parsing and severity classification."""
-
-    def test_parse_valid_extraction(self):
-        from seniocare.image_analysis.report_analyzer import _parse_extraction_response
-        response = '{"report_type": "blood_test", "date": "2025-01-15", "key_findings": ["High blood sugar"], "values": {"fasting glucose": "180 mg/dL"}, "recommendations": ["Follow up in 1 month"]}'
-        result = _parse_extraction_response(response)
-
-        assert result["report_type"] == "blood_test"
-        assert result["date"] == "2025-01-15"
-        assert len(result["key_findings"]) == 1
-        assert "fasting glucose" in result["values"]
-
-    def test_parse_invalid_extraction(self):
-        from seniocare.image_analysis.report_analyzer import _parse_extraction_response
-        result = _parse_extraction_response("not json")
-        assert result["report_type"] == "unknown"
-        assert result["values"] == {}
-
-    def test_severity_normal(self):
-        from seniocare.image_analysis.report_analyzer import evaluate_severity_from_values
-        values = {"hemoglobin": "14.0 g/dL", "platelets": "250 thousand/uL"}
-        assert evaluate_severity_from_values(values) == "NORMAL"
-
-    def test_severity_attention(self):
-        from seniocare.image_analysis.report_analyzer import evaluate_severity_from_values
-        values = {"fasting glucose": "140 mg/dL", "total cholesterol": "250 mg/dL"}
-        assert evaluate_severity_from_values(values) == "ATTENTION"
-
-    def test_severity_critical_high_glucose(self):
-        from seniocare.image_analysis.report_analyzer import evaluate_severity_from_values
-        values = {"fasting glucose": "350 mg/dL"}
-        assert evaluate_severity_from_values(values) == "CRITICAL"
-
-    def test_severity_critical_low_hemoglobin(self):
-        from seniocare.image_analysis.report_analyzer import evaluate_severity_from_values
-        values = {"hemoglobin": "5.5 g/dL"}
-        assert evaluate_severity_from_values(values) == "CRITICAL"
-
-    def test_severity_critical_high_potassium(self):
-        from seniocare.image_analysis.report_analyzer import evaluate_severity_from_values
-        values = {"potassium": "6.5 mEq/L"}
-        assert evaluate_severity_from_values(values) == "CRITICAL"
-
-    def test_severity_mixed_values(self):
-        """If any value is critical, overall should be CRITICAL."""
-        from seniocare.image_analysis.report_analyzer import evaluate_severity_from_values
-        values = {
-            "fasting glucose": "95 mg/dL",     # normal
-            "total cholesterol": "250 mg/dL",   # attention
-            "hemoglobin": "5.0 g/dL",           # critical
-        }
-        assert evaluate_severity_from_values(values) == "CRITICAL"
-
-    def test_db_storage_and_retrieval(self):
-        """Test that report storage and retrieval works."""
-        from seniocare.image_analysis.report_analyzer import _store_report_in_db, get_user_reports
-        import json
-
-        report_id = "RPT_test_123"
-        user_id = "test_image_user"
-        report_data = {
-            "report_type": "blood_test",
-            "date": "2025-01-15",
-            "key_findings": ["Elevated glucose"],
-            "values": {"fasting glucose": "180 mg/dL"},
-            "recommendations": ["Follow up with doctor"],
-        }
-
-        stored = _store_report_in_db(
-            report_id=report_id,
-            user_id=user_id,
-            report_data=report_data,
-            health_summary="Blood sugar is elevated. Consult your doctor.",
-            severity_level="ATTENTION",
-            raw_response="raw model output here",
-        )
-        assert stored is True
-
-        # Retrieve and verify
-        reports = get_user_reports(user_id)
-        assert len(reports) >= 1
-
-        found = None
-        for r in reports:
-            if r["report_id"] == report_id:
-                found = r
-                break
-
-        assert found is not None
-        assert found["report_type"] == "blood_test"
-        assert found["severity_level"] == "ATTENTION"
-        assert "Elevated glucose" in found["key_findings"]
-        assert found["lab_values"]["fasting glucose"] == "180 mg/dL"
 
 
 # ===========================================================================

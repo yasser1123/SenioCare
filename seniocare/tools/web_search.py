@@ -16,16 +16,22 @@ content extraction when needed.
 ================================================================================
 """
 
+import os
 import requests
 from bs4 import BeautifulSoup
 from typing import Optional
+from dotenv import load_dotenv
 from google.adk.tools import ToolContext
+
+load_dotenv()
 
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
 
-SERPAPI_KEY = "fa3aa24b0ed25e473b7ef9ae408ea9df683a910d12e8d5b21853f729a436e39f"
+# SerpAPI key is read from the SERPAPI_KEY environment variable (see .env.example).
+# Never commit API keys to source control.
+SERPAPI_KEY = os.environ.get("SERPAPI_KEY", "")
 SERPAPI_URL = "https://serpapi.com/search"
 
 # Trusted medical sources for filtering
@@ -135,6 +141,13 @@ def _search_serpapi(query: str, engine: str = "google", **kwargs) -> dict:
     Returns:
         dict: The API response or error information.
     """
+    if not SERPAPI_KEY:
+        return {
+            "success": False,
+            "error": "SERPAPI_KEY is not configured. Add it to your .env file to enable web search.",
+            "data": None,
+        }
+
     params = {
         "engine": engine,
         "q": query,

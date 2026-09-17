@@ -54,3 +54,4 @@ sessions.db
 # OS / editor
 .DS_Store
 Thumbs.db
+.aider*
