@@ -136,6 +136,20 @@ Token-priced cost at the reference model (`gemini/gemini-2.5-flash` list price):
 
 ---
 
+## F-09 · A fresh install of requirements.txt could not start the app
+
+**Observation.** CI (fresh Ubuntu, `pip install -r requirements.txt`) failed the C-16 route test with `ModuleNotFoundError: No module named 'sqlalchemy'` … `pip install google-adk[db]`.
+
+**Evidence.** `requirements.txt` listed `google-adk>=0.1.0` without the `[db]` extra; `DatabaseSessionService` (used by every deployment of this app) needs SQLAlchemy. Locally it worked only because another package had installed SQLAlchemy. Earlier in the branch `apscheduler` (listed) and the pytest plugins (configured) were likewise missing from the working environment.
+
+**Implication.** The declared dependencies never described a runnable environment; "works on my machine" masked it until CI existed.
+
+**Action.** `google-adk[db]>=1.22.0,<2`; CI runs the full suite on every push.
+
+**Paper use.** Engineering-practice note: CI as a correctness instrument, not just a test runner.
+
+---
+
 ## Open items being tracked
 
 | Item | Status | Where it will be answered |

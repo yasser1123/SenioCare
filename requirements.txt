@@ -1,4 +1,5 @@
-google-adk>=0.1.0
+# [db] pulls in SQLAlchemy, required by DatabaseSessionService (a bare install could not start the app)
+google-adk[db]>=1.22.0,<2
 google-genai>=0.3.0
 litellm>=1.0.0
 python-dotenv>=1.0.0

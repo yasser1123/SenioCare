@@ -72,6 +72,12 @@ RUBRICS_DIR = EVALS_DIR / "rubrics"
 
 APP_NAME = "seniocare"
 
+# A turn that exceeds this is recorded as an error and the run continues. Without
+# it one stalled network future can hang a 60-turn run forever (observed on the
+# first Colab baseline attempt: 80 min, 0 progress, event loop idle in _poll).
+TURN_TIMEOUT_S = float(os.environ.get("EVAL_TURN_TIMEOUT_S", "420"))
+HEARTBEAT_S = 60.0
+
 # Tools actually registered on the Feature Agent (seniocare/sub_agents/feature_agent.py)
 KNOWN_TOOLS = {
     "get_meal_options", "get_meal_recipe", "check_drug_food_interaction", "assess_symptoms",
@@ -96,6 +102,8 @@ SNAPSHOT_STATE_KEYS = (
     "temp:_meal_tool_called", "temp:_recipe_tool_called", "temp:_interaction_tool_called",
     "temp:_symptom_tool_called", "temp:_exercise_tool_called", "temp:_store_report_tool_called",
     "user:preferences", "conversation_turn_count", "session_headline",
+    # written by seniocare/pipeline.py on the fixed branch
+    "safety_status", "intent", "route", "orchestrator_parse_ok", "profile_missing", "emergency_task_started",
 )
 
 
@@ -399,8 +407,11 @@ class AdkSession:
         stage_texts: dict[str, str] = {}
         tools_called: list[str] = []
         started = time.perf_counter()
-        try:
+        last_event_at = [started]
+
+        async def consume():
             async for event in self.runner.run_async(user_id=self.user_id, session_id=self.session_id, new_message=message):
+                last_event_at[0] = time.perf_counter()
                 author = getattr(event, "author", None)
                 content = getattr(event, "content", None)
                 if content and getattr(content, "parts", None):
@@ -411,6 +422,23 @@ class AdkSession:
                         fc = getattr(part, "function_call", None)
                         if fc is not None and getattr(fc, "name", None):
                             tools_called.append(fc.name)
+
+        async def heartbeat():
+            while True:
+                await asyncio.sleep(HEARTBEAT_S)
+                print(f"      … {case.id}: {time.perf_counter() - started:.0f}s elapsed, "
+                      f"{time.perf_counter() - last_event_at[0]:.0f}s since last event, "
+                      f"stages so far {list(stage_texts)}", flush=True)
+
+        hb = asyncio.create_task(heartbeat())
+        try:
+            try:
+                await asyncio.wait_for(consume(), timeout=TURN_TIMEOUT_S)
+            except asyncio.TimeoutError:
+                raise RuntimeError(
+                    f"turn timeout after {TURN_TIMEOUT_S:.0f}s (stages seen: {list(stage_texts)}, "
+                    f"tools: {tools_called}); the model/tool call never returned"
+                )
             result.e2e_latency_ms = int((time.perf_counter() - started) * 1000)
 
             state = await self.state()
@@ -431,6 +459,7 @@ class AdkSession:
             result.error = traceback.format_exc(limit=6)
             result.e2e_latency_ms = int((time.perf_counter() - started) * 1000)
         finally:
+            hb.cancel()
             obs.reset_trace_id(token)
             obs.remove_sink(capture)
 
