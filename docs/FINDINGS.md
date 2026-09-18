@@ -1,0 +1,100 @@
+# SenioCare — Research Findings Log
+
+A running log of every finding with evidence, produced while hardening the system on branch `feat/hardening`. Each entry is written so it can be lifted into the paper: what was observed, how it was measured, what it implies, and how it was (or will be) addressed. Findings from the static audit are in `docs/AUDIT.md` (C-01…C-16, R-01…R-06); this file records what was learned **by running things**.
+
+Entry format: **Observation → Evidence → Implication → Action → Paper use.**
+
+---
+
+## F-01 · Database connections hung indefinitely; cause was DNS, not load
+
+**Observation.** The test suite stalled at 0% CPU on two consecutive runs (2026-09-18), once inside `psycopg2.connect`, once inside `cursor.execute` on a connection that had answered `SELECT 1` a moment earlier.
+
+**Evidence.** Neon's pooler hostname resolves to three IPs; from this network one of them (`3.227.221.118`) black-holes TCP. Twenty sequential connects with an 8 s timeout: 12 succeeded in ~1 s, 8 hit the timeout before libpq fell through to the next address (`docs/PLAN.md` 0.5). `psycopg2.connect` had no `connect_timeout` and synchronous psycopg2 has no query timeout at all, so either hang was unbounded. Every tool call opened a fresh TLS connection, so the whole suite paid the lottery ~100 times.
+
+**Implication.** The production app was one DNS answer away from a request that never returns. Latency measurements taken before this fix would have been dominated by connection setup, not by the model.
+
+**Action.** Pooled connections with `connect_timeout`, TCP keepalives and a client-side query deadline via psycopg2's wait callback (`seniocare/data/database.py`). Suite: 108 s with random hangs → 56 s deterministic; 81/81 green locally, 122/122 on CI with a local Postgres.
+
+**Paper use.** Methods: infrastructure controls needed before latency can be attributed to the LLM stages. Also a cautionary data point on serverless Postgres from networks with partial connectivity.
+
+---
+
+## F-02 · Startup handlers never ran: no scheduler, no Firebase, no caregiver pushes
+
+**Observation.** With observability wired into `@app.on_event("startup")`, the trace sink never started under the app.
+
+**Evidence.** ADK's `get_fast_api_app()` installs its own lifespan. Starlette ignores `on_event` handlers whenever a lifespan is set. A probe handler registered the same way reported `{'startup': False, 'shutdown': False}` after a full `TestClient` lifecycle; `app.notifications._firebase_initialized` stayed `False`; the APScheduler instance was never created (FastAPI 0.123, Starlette current).
+
+**Implication.** In every deployment of `main.py` to date:
+- the daily / weekly / monthly report jobs (`app/scheduler.py`) never ran;
+- Firebase Admin was never initialised, so `notify_caregivers()` took its "Firebase not initialized — skipping notifications" branch on every call;
+- therefore **no emergency push has ever been delivered by the running app**, independent of the fire-and-forget defect in AUDIT C-09. The Flutter side would have seen silence.
+
+**Action.** `main.py` now wraps ADK's lifespan and runs startup/shutdown inside it (commit `fix(app): C-17`). Regression check: the sink and scheduler are observable at `/health` and `/metrics/summary`.
+
+**Paper use.** Results: the emergency escalation path had a 0 % delivery rate before hardening for a reason the static audit did not catch; only instrumentation exposed it. Supports the argument that observability must precede evaluation.
+
+---
+
+## F-03 · Prompt volume: ~10,000 prompt tokens per turn before the user says anything
+
+**Observation.** One ordinary meal request ("عايز أكلة كويسة على الغدا") through the unmodified three-stage pipeline.
+
+**Evidence** (local `qwen3:0.6b`, CPU, `llm_traces` rows for trace `e2e-3e0e769c`):
+
+| stage | prompt tokens | completion tokens | latency |
+|---|---|---|---|
+| orchestrator | 3,752 | 372 | 22.3 s |
+| feature | 4,095 | 507 | 18.7 s |
+| formatter | 2,160 | 343 | 12.8 s |
+| **turn** | **10,007** | **1,222** | **54.0 s** (LLM share 99.6 %) |
+
+Token-priced cost at the reference model (`gemini/gemini-2.5-flash` list price): **$0.0061 per turn**, 89 % of it prompt tokens.
+
+**Implication.** The three system prompts (orchestrator ≈ 300 lines, feature ≈ 300, formatter ≈ 230) dominate both cost and latency. Prompt caching or prompt compression would have more effect than any model swap. This is the baseline against which the Phase 4 prompt clean-ups (C-06 phantom tools, dead fields) can be measured.
+
+**Action.** Recorded per stage on every turn; `scripts/metrics_report.py` reports it.
+
+**Paper use.** Cost model section; motivates the "prompt share of cost" metric.
+
+---
+
+## F-04 · Small models fail the pipeline silently in different ways, and the harness must catch each
+
+**Observation.** Verifying the plumbing with small local models before the GPU model was available.
+
+**Evidence.**
+- `qwen2.5:0.5b` (both `ollama_chat/` and the OpenAI-compatible `/v1` route): answers fluently, never emits a `tool_calls` array → `scripts/check_model.py` FAIL on the tool-call check.
+- `qwen3:0.6b`: passes all five `check_model.py` checks, including ADK's real tool loop, **but** in the full pipeline the Feature Agent returned an **empty** completion (its 4,095-token prompt plus reasoning consumed the budget) → `stage` record `empty_output=true`, `parse_ok=false`; the Formatter then produced 489 chars of fluent Arabic **from nothing** and the turn looked normal to a user.
+- Thinking models spend the completion budget on hidden reasoning; the first version of the check reported a bare "empty response" and had to be made reasoning-aware.
+
+**Implication.** "Model responds" is not evidence of a working pipeline. A stage can produce nothing and the next stage will confabulate a plausible answer. The `empty_output` / `parse_ok` stage metrics are the only place this is visible.
+
+**Action.** Both metrics are emitted per stage; the eval harness (Phase 3) treats an empty or unparseable Feature output as a failed structural assertion regardless of how good the final Arabic looks.
+
+**Paper use.** Motivates stage-level assertions over end-to-end judgement; concrete example of silent failure propagation in sequential agent chains.
+
+---
+
+## F-05 · Where a model runs is orthogonal to tools (verified, not assumed)
+
+**Observation.** The same backend, unchanged, drove tools through local Ollama (`ollama_chat/`), through Ollama's OpenAI-compatible `/v1` (the route a Colab tunnel uses, with a placeholder API key), and through ADK's `Runner` tool loop.
+
+**Evidence.** `scripts/check_model.py --adk` → 5/5 PASS with `qwen3:0.6b` on both routes; tool executed in-process with `meal_type='lunch'` from a model-emitted call.
+
+**Implication.** Inference location is a deployment variable (`MODEL_API_BASE`), not an architecture change. Supports the Colab-GPU experimental setup without threatening validity of tool-related measurements.
+
+**Paper use.** Experimental setup section.
+
+---
+
+## Open items being tracked
+
+| Item | Status | Where it will be answered |
+|---|---|---|
+| Does `gemma4:e4b` emit well-formed tool calls at all? | **Unverified** | Colab gate cell / `check_model.py --adk` |
+| Turn-2 tool failure rate (AUDIT C-04) | To be measured | multi-turn eval, baseline run |
+| False-emergency rate on single mild symptoms (C-12) | To be measured | baseline run, `symptom_*` cases |
+| Arabic symptom recall (C-13) | To be measured | baseline run |
+| Intent-unparsed rate (C-03) | Measured per turn | `metrics_report.py`: *intent unparsed* |

@@ -12,14 +12,23 @@ Usage:
 import os
 import sys
 import warnings
+from contextlib import asynccontextmanager
+
+import time
 
 import uvicorn
 from dotenv import load_dotenv
+from fastapi import Request
 from google.adk.cli.fast_api import get_fast_api_app
+
+from seniocare import observability as obs
+
+# JSON logging must be configured before anything else logs.
+obs.configure_logging()
 
 from app.config import SESSION_DB, MEMORY_SERVICE_URI, ALLOWED_ORIGINS, SERVE_WEB_INTERFACE, APP_VERSION, MODEL_INFO
 from app.openapi import make_custom_openapi
-from app.routers import health, sessions, chat_history, user_profile, reports
+from app.routers import health, sessions, chat_history, user_profile, reports, metrics
 from app.scheduler import setup_scheduler, shutdown_scheduler
 
 load_dotenv(override=True)
@@ -55,26 +64,77 @@ app.include_router(sessions.router)
 app.include_router(chat_history.router)
 app.include_router(user_profile.router)
 app.include_router(reports.router)
+app.include_router(metrics.router)
 
 # =============================================================================
-# LIFECYCLE — Scheduler
+# OBSERVABILITY — trace id + request latency (Point C in docs/INSTRUMENTATION.md)
 # =============================================================================
 
-@app.on_event("startup")
-async def startup_event():
-    """Start the report generation scheduler and Firebase on app boot."""
-    setup_scheduler()
-    # Initialize Firebase for push notifications
+_UNTRACED_PATHS = ("/docs", "/openapi.json", "/redoc", "/static", "/dev-ui", "/favicon.ico")
+
+
+@app.middleware("http")
+async def trace_requests(request: Request, call_next):
+    """Give every request a trace_id (honouring an incoming X-Trace-Id) and record its latency."""
+    trace_id = request.headers.get("x-trace-id") or obs.new_trace_id()
+    token = obs.set_trace_id(trace_id)
+    started = time.perf_counter()
+    status = 500
     try:
-        from app.notifications import init_firebase
-        init_firebase()
-    except Exception as e:
-        print(f"[Startup] Firebase init warning: {e}")
+        response = await call_next(request)
+        status = response.status_code
+        response.headers["X-Trace-Id"] = trace_id
+        return response
+    finally:
+        path = request.url.path
+        if not path.startswith(_UNTRACED_PATHS):
+            obs.emit(
+                "http_request",
+                method=request.method,
+                path=path,
+                status=status,
+                ok=status < 500,
+                latency_ms=round((time.perf_counter() - started) * 1000),
+            )
+        obs.reset_trace_id(token)
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Gracefully stop the scheduler."""
-    shutdown_scheduler()
+# =============================================================================
+# LIFECYCLE
+# =============================================================================
+# ADK's get_fast_api_app() installs its own lifespan. Starlette ignores
+# @app.on_event("startup"/"shutdown") handlers whenever a lifespan is set, so
+# the previous handlers here NEVER ran: the scheduler was never started and
+# Firebase was never initialised in the running app (docs/FINDINGS.md F-02).
+# Wrap ADK's lifespan instead of registering event handlers next to it.
+
+_adk_lifespan = app.router.lifespan_context
+
+
+@asynccontextmanager
+async def _lifespan(application):
+    async with _adk_lifespan(application):
+        obs.start_postgres_sink()
+        setup_scheduler()
+        try:
+            from app.notifications import init_firebase
+
+            init_firebase()
+        except Exception as e:  # noqa: BLE001
+            print(f"[Startup] Firebase init warning: {e}")
+        try:
+            yield
+        finally:
+            shutdown_scheduler()
+            obs.stop_postgres_sink()
+            try:
+                from seniocare.data.database import close_pool
+
+                close_pool()
+            except Exception as e:  # noqa: BLE001
+                print(f"[Shutdown] pool close warning: {e}")
+
+
+app.router.lifespan_context = _lifespan
 
 
 # =============================================================================
@@ -118,6 +178,7 @@ if __name__ == "__main__":
     GET  /reports/medical/{{user_id}}   - Medical image reports
 
     GET  /health              - Health check (?probe=full to call the model)
+    GET  /metrics/summary     - Latency / tokens / cost / routing, last N hours
     GET  /docs                - Swagger UI
 
   Model      : {MODEL_INFO['model']}  ({MODEL_INFO['location']})
