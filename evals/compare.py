@@ -36,6 +36,7 @@ METRICS = [
     ("Tool recall", ("tools", "recall"), "pct"),
     ("Empty final response rate", ("rates", "empty_final"), "pct"),
     ("Empty Feature output on ALLOWED (F-04)", ("rates", "empty_feature_when_allowed"), "int"),
+    ("Orchestrator calls cut at token limit (F-10)", ("truncation", "orchestrator_truncated_rate"), "pct"),
     ("e2e latency p50", ("latency", "e2e_p50_ms"), "ms"),
     ("e2e latency p95", ("latency", "e2e_p95_ms"), "ms"),
     ("Prompt tokens / turn", ("tokens", "prompt_per_turn_avg"), "int"),

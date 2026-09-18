@@ -917,6 +917,15 @@ def build_summary(results: list[Result], cases_by_id: dict[str, Case], run_id: s
         for t in r.tool_records:
             if t.get("latency_ms") is not None:
                 tool_lat.setdefault(t["tool"], []).append(t["latency_ms"])
+    # Truncated generations per stage (FINDINGS F-10): a stage that hits the
+    # provider's token limit never reached its structured output.
+    max_tokens_hits: dict[str, int] = {}
+    llm_calls_by_stage: dict[str, int] = {}
+    for r in ok:
+        for l in r.metrics.get("llm") or []:
+            llm_calls_by_stage[l["stage"]] = llm_calls_by_stage.get(l["stage"], 0) + 1
+            if str(l.get("finish_reason") or "").upper() in ("MAX_TOKENS", "LENGTH"):
+                max_tokens_hits[l["stage"]] = max_tokens_hits.get(l["stage"], 0) + 1
 
     # --- judge
     judged = [r for r in results if r.judge and r.judge.get("score") is not None]
@@ -949,6 +958,8 @@ def build_summary(results: list[Result], cases_by_id: dict[str, Case], run_id: s
             "turn2plus_guard_hit_rate": _rate(guard_turn2_hit, len(guard_turn2)),
             "latency_p50_ms": {k: _pct(v, 0.5) for k, v in tool_lat.items()},
         },
+        "truncation": {"max_tokens_hits": max_tokens_hits, "llm_calls_by_stage": llm_calls_by_stage,
+                       "orchestrator_truncated_rate": _rate(max_tokens_hits.get("orchestrator_agent", 0), llm_calls_by_stage.get("orchestrator_agent", 0))},
         "latency": {"e2e_p50_ms": _pct(lat, 0.5), "e2e_p95_ms": _pct(lat, 0.95), "e2e_max_ms": max(lat) if lat else None,
                     "stage_p50_ms": {k: _pct(v, 0.5) for k, v in stage_lat.items()},
                     "stage_p95_ms": {k: _pct(v, 0.95) for k, v in stage_lat.items()}},
@@ -1004,6 +1015,9 @@ def summary_markdown(s: dict, results: list[Result]) -> str:
            f"- tool latency p50 ms: {s['tools']['latency_p50_ms']}\n",
            "\n## Silent failures\n",
            f"- empty final response: {pc(s['rates']['empty_final'])} · empty Feature output on ALLOWED turns (FINDINGS F-04): {s['rates']['empty_feature_when_allowed']}\n",
+           f"- generations cut at the token limit (FINDINGS F-10): {s['truncation']['max_tokens_hits']} of {s['truncation']['llm_calls_by_stage']}; "
+           f"orchestrator truncated on {pc(s['truncation']['orchestrator_truncated_rate'])} of its calls
+",
            "\n## Latency, tokens, cost\n",
            f"- e2e p50 **{s['latency']['e2e_p50_ms']} ms**, p95 {s['latency']['e2e_p95_ms']} ms, max {s['latency']['e2e_max_ms']} ms\n"
            f"- stage p50 ms: {s['latency']['stage_p50_ms']}\n- stage p95 ms: {s['latency']['stage_p95_ms']}\n"
@@ -1070,6 +1084,7 @@ def print_summary(s: dict) -> None:
     print(f"  intent unparsed       {pc(s['rates']['intent_unknown'])}   <- AUDIT C-03")
     print(f"  forbidden tool calls  {s['tools']['forbidden_calls']}     <- AUDIT C-02")
     print(f"  turn>=2 guard hits    {s['tools']['turn2plus_with_guard_hit']}/{s['tools']['turn2plus_turns']}   <- AUDIT C-04")
+    print(f"  orchestrator cut off  {pc(s['truncation']['orchestrator_truncated_rate'])}   <- FINDINGS F-10 (MAX_TOKENS)")
     print(f"  tool precision/recall {pc(s['tools']['precision'])} / {pc(s['tools']['recall'])}")
     print(f"  e2e latency           p50 {s['latency']['e2e_p50_ms']} ms   p95 {s['latency']['e2e_p95_ms']} ms")
     print(f"  tokens/turn           prompt {s['tokens']['prompt_per_turn_avg']}  completion {s['tokens']['completion_per_turn_avg']}")

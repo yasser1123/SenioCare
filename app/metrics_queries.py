@@ -42,7 +42,8 @@ def llm_by_stage(cur, start: str, end: str) -> list[dict[str, Any]]:
                SUM(cost_token_priced)                                     AS cost_token_priced_usd,
                SUM(cost_compute)                                          AS cost_compute_usd,
                SUM(CASE WHEN ok IS FALSE THEN 1 ELSE 0 END)               AS errors,
-               SUM(CASE WHEN attrs ? 'requested_tools' THEN 1 ELSE 0 END) AS calls_requesting_tools
+               SUM(CASE WHEN attrs ? 'requested_tools' THEN 1 ELSE 0 END) AS calls_requesting_tools,
+               SUM(CASE WHEN UPPER(attrs->>'finish_reason') IN ('MAX_TOKENS', 'LENGTH') THEN 1 ELSE 0 END) AS truncated
         FROM llm_traces
         WHERE kind = 'llm_call' AND ts >= %s AND ts < %s
         GROUP BY stage ORDER BY stage

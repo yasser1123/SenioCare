@@ -85,7 +85,7 @@ def to_markdown(data: dict) -> str:
     out.append(table(data["llm_by_stage"], [
         ("stage", "stage"), ("calls", "calls"), ("latency_p50_ms", "p50 ms"), ("latency_p95_ms", "p95 ms"),
         ("prompt_tokens_avg", "prompt tok avg"), ("completion_tokens_avg", "compl. tok avg"),
-        ("calls_requesting_tools", "with tool calls"), ("errors", "errors"),
+        ("calls_requesting_tools", "with tool calls"), ("truncated", "cut at token limit"), ("errors", "errors"),
         ("cost_token_priced_usd", "cost (ref $)"), ("cost_compute_usd", "cost (GPU $)"),
     ]))
 
