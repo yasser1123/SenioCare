@@ -274,10 +274,18 @@ elif TUNNEL == "ngrok":
 else:
     raise ValueError(TUNNEL)
 
-# Give the edge a moment, then verify the public URL answers
-time.sleep(3)
-ok = requests.get(f"{PUBLIC_URL}/v1/models", timeout=30).status_code == 200
-print("public endpoint:", PUBLIC_URL, "OK" if ok else "NOT RESPONDING YET (re-run this check in a few seconds)")
+# A quick tunnel's hostname takes a little while to propagate in DNS; poll instead of failing.
+ok = False
+t0 = time.time()
+while time.time() - t0 < 120:
+    try:
+        ok = requests.get(f"{PUBLIC_URL}/v1/models", timeout=15).status_code == 200
+        if ok:
+            break
+    except Exception as e:
+        last = f"{type(e).__name__}"
+    time.sleep(5)
+print("public endpoint:", PUBLIC_URL, f"OK after {time.time()-t0:.0f}s" if ok else "NOT RESPONDING YET — DNS may still be propagating; re-run cell 6 in a minute")
 
 model_name = f"openai/{SERVED_NAME}" if BACKEND == "ollama" else f"hosted_vllm/{SERVED_NAME}"
 print(f"""
