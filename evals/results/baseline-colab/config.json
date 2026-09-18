@@ -1,0 +1,22 @@
+{
+  "run_id": "2026-09-18T20:48:03Z",
+  "name": "baseline-colab",
+  "mode": "adk",
+  "cases_path": "D:\\PROJECTS\\Graduation Project\\SenioCare-baseline\\evals\\cases",
+  "cases": 54,
+  "turns": 60,
+  "model": {
+    "model": "openai/gemma4:e4b",
+    "provider": "openai",
+    "location": "remote",
+    "api_base": "https://variety-rainbow-donors-sociology.trycloudflare.com/v1",
+    "api_key": "none",
+    "timeout_s": 120.0
+  },
+  "judge_model": null,
+  "judge_human": false,
+  "started_at": "2026-09-18T20:48:03Z",
+  "git_commit": "9b98035",
+  "human_review_rows": 23,
+  "finished_at": "2026-09-18T21:49:47+00:00"
+}
