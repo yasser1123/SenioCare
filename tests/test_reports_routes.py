@@ -26,16 +26,15 @@ from app.routers import reports
 paths = [r.path for r in reports.router.routes if isinstance(r, APIRoute)]
 i_med, i_seed, i_param = (paths.index(p) for p in ("/reports/medical/{user_id}", "/reports/seed", "/reports/{user_id}/{report_id}"))
 assert i_med < i_param and i_seed < i_param, paths
-# Resolve the way Starlette does: first match wins.
+# Resolve with a real request. The shadowing route answered 404 "Report not found"
+# for this path; the medical route answers 200 (or a DB error), never that 404.
+from fastapi.testclient import TestClient
 app = FastAPI(); app.include_router(reports.router)
-from starlette.routing import Match
-scope = {"type": "http", "method": "GET", "path": "/reports/medical/elder_123", "root_path": "", "headers": []}
-for route in app.routes:
-    if not isinstance(route, APIRoute):
-        continue  # newer FastAPI also lists _IncludedRouter entries here
-    m, child = route.matches(scope)
-    if m == Match.FULL:
-        print("MATCHED", route.path); break
+r = TestClient(app).get("/reports/medical/elder_123")
+print("STATUS", r.status_code, r.text[:160])
+if r.status_code == 404 and "Report not found" in r.text:
+    print("SHADOWED"); sys.exit(2)
+print("MATCHED /reports/medical/{user_id}")
 """
 
 

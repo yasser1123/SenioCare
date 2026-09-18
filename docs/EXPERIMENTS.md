@@ -27,6 +27,7 @@ The eval harness is not the system under test; both runs used the same `evals/ru
 | Timeout | 120 s per model call (`MODEL_TIMEOUT_S`), 420 s per turn in the harness |
 | Backend host | Windows 10 laptop running the FastAPI/ADK process in-process (harness mode `adk`), Postgres on Neon (us-east-1) |
 | Gate | `python scripts/check_model.py --adk` passed 5/5 against this endpoint before the runs (`docs/FINDINGS.md` F-06) |
+| Libraries | google-adk 1.22.0, litellm 1.80.13, fastapi 0.123.10 / starlette 0.50.0, uvicorn 0.40.0, Python 3.12.10 (pinned by minor in `requirements.txt`) |
 
 Latency numbers therefore include: tunnel round trip (Egypt → Cloudflare → Colab), T4 prefill of ~3–4k-token system prompts per stage, generation, and Neon round trips (~150–200 ms each) for tool calls. They are comparable *between* the two runs, not with a production deployment.
 

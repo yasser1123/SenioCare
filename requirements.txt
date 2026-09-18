@@ -1,14 +1,18 @@
+# Versions are pinned to the minor releases the system was developed, tested and
+# measured with (docs/EXPERIMENTS.md). ADK's internals (callback signatures,
+# LiteLlm kwargs, lifespan) and FastAPI/Starlette routing changed between
+# releases; CI on an unpinned install ran ADK 1.39 / FastAPI 0.141 and broke.
 # [db] pulls in SQLAlchemy, required by DatabaseSessionService (a bare install could not start the app)
-google-adk[db]>=1.22.0,<2
+google-adk[db]>=1.22.0,<1.23
 google-genai>=0.3.0
-litellm>=1.0.0
+litellm>=1.80.0,<1.81
 python-dotenv>=1.0.0
 pydantic>=2.0.0
 
 # API Server dependencies
-uvicorn[standard]>=0.27.0
+uvicorn[standard]>=0.40.0,<0.41
 aiosqlite>=0.19.0
-fastapi>=0.109.0
+fastapi>=0.123.0,<0.124
 
 # Cloud Database (Neon PostgreSQL)
 asyncpg>=0.30.0
