@@ -10,6 +10,8 @@ import uuid
 from datetime import datetime
 
 from google.adk.tools import ToolContext
+
+from seniocare.tools._guards import already_called_this_turn, mark_called
 from seniocare.data.database import get_connection
 
 
@@ -39,13 +41,13 @@ async def store_medical_report(
     Returns:
         dict: Confirmation with report_id and storage status.
     """
-    # Prevent multiple calls in the same turn
-    if tool_context.state.get("_store_report_tool_called"):
+    # Prevent multiple calls in the same turn (per-turn guard, AUDIT C-04)
+    if already_called_this_turn(tool_context.state, "_store_report_tool_called"):
         return {
             "status": "already_called",
             "message": "تم حفظ التقرير الطبي بالفعل. استخدم النتيجة السابقة.",
         }
-    tool_context.state["_store_report_tool_called"] = True
+    mark_called(tool_context.state, "_store_report_tool_called")
 
     user_id = tool_context.state.get("user:user_id", "unknown")
     report_id = f"RPT_{uuid.uuid4().hex[:12]}"

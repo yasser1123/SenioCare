@@ -2,6 +2,8 @@
 
 import json
 from google.adk.tools import ToolContext
+
+from seniocare.tools._guards import already_called_this_turn, mark_called
 from seniocare.data.database import get_connection
 
 
@@ -20,13 +22,13 @@ def get_meal_options(meal_type: str, tool_context: ToolContext) -> dict:
     Returns:
         dict: Compact meal options with key nutrition info (max 3).
     """
-    # Prevent multiple calls in the same turn
-    if tool_context.state.get("_meal_tool_called"):
+    # Prevent multiple calls in the same turn (per-turn guard, AUDIT C-04)
+    if already_called_this_turn(tool_context.state, "_meal_tool_called"):
         return {
             "status": "already_called",
             "message": "تم استدعاء هذه الأداة بالفعل. استخدم النتيجة السابقة لصياغة التوصية."
         }
-    tool_context.state["_meal_tool_called"] = True
+    mark_called(tool_context.state, "_meal_tool_called")
 
     # Read user profile from state
     conditions = tool_context.state.get("user:chronicDiseases", [])
@@ -157,13 +159,13 @@ def get_meal_recipe(meal_id: str, tool_context: ToolContext) -> dict:
     Returns:
         dict: Full recipe with steps, tips, ingredients, and nutrition.
     """
-    # Prevent multiple calls in the same turn
-    if tool_context.state.get("_recipe_tool_called"):
+    # Prevent multiple calls in the same turn (per-turn guard, AUDIT C-04)
+    if already_called_this_turn(tool_context.state, "_recipe_tool_called"):
         return {
             "status": "already_called",
             "message": "تم استدعاء أداة الوصفة بالفعل. استخدم النتيجة السابقة."
         }
-    tool_context.state["_recipe_tool_called"] = True
+    mark_called(tool_context.state, "_recipe_tool_called")
 
     conn = get_connection()
     cursor = conn.cursor()

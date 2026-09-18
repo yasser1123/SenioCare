@@ -2,6 +2,8 @@
 
 import json
 from google.adk.tools import ToolContext
+
+from seniocare.tools._guards import already_called_this_turn, mark_called
 from seniocare.data.database import get_connection
 
 
@@ -17,13 +19,13 @@ def get_exercises(tool_context: ToolContext) -> dict:
     Returns:
         dict: Safe exercise recommendations with instructions.
     """
-    # Prevent multiple calls in the same turn
-    if tool_context.state.get("_exercise_tool_called"):
+    # Prevent multiple calls in the same turn (per-turn guard, AUDIT C-04)
+    if already_called_this_turn(tool_context.state, "_exercise_tool_called"):
         return {
             "status": "already_called",
             "message": "تم استدعاء هذه الأداة بالفعل. استخدم النتيجة السابقة لصياغة التوصية."
         }
-    tool_context.state["_exercise_tool_called"] = True
+    mark_called(tool_context.state, "_exercise_tool_called")
 
     # Read from state
     mobility_level = tool_context.state.get("user:mobilityStatus", "limited")

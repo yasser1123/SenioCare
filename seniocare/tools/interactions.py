@@ -1,6 +1,8 @@
 """Drug-Food Interaction tool - checks for interactions between user's drugs and foods."""
 
 from google.adk.tools import ToolContext
+
+from seniocare.tools._guards import already_called_this_turn, mark_called
 from seniocare.data.database import get_connection
 
 
@@ -18,13 +20,13 @@ def check_drug_food_interaction(food_names: list, tool_context: ToolContext) -> 
     Returns:
         dict: Interaction results with severity and advice.
     """
-    # Prevent multiple calls in the same turn
-    if tool_context.state.get("_interaction_tool_called"):
+    # Prevent multiple calls in the same turn (per-turn guard, AUDIT C-04)
+    if already_called_this_turn(tool_context.state, "_interaction_tool_called"):
         return {
             "status": "already_called",
             "message": "تم استدعاء هذه الأداة بالفعل. استخدم النتيجة السابقة."
         }
-    tool_context.state["_interaction_tool_called"] = True
+    mark_called(tool_context.state, "_interaction_tool_called")
 
     # Read user's medications from state
     user_medications = tool_context.state.get("user:medications", [])

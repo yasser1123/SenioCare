@@ -2,6 +2,8 @@
 
 import json
 from google.adk.tools import ToolContext
+
+from seniocare.tools._guards import already_called_this_turn, mark_called
 from seniocare.data.database import get_connection
 
 
@@ -21,13 +23,13 @@ def assess_symptoms(symptoms: list, tool_context: ToolContext) -> dict:
     Returns:
         dict: Assessment results with matched diseases, confidence, and severity.
     """
-    # Prevent multiple calls in the same turn
-    if tool_context.state.get("_symptom_tool_called"):
+    # Prevent multiple calls in the same turn (per-turn guard, AUDIT C-04)
+    if already_called_this_turn(tool_context.state, "_symptom_tool_called"):
         return {
             "status": "already_called",
             "message": "تم استدعاء هذه الأداة بالفعل. استخدم النتيجة السابقة."
         }
-    tool_context.state["_symptom_tool_called"] = True
+    mark_called(tool_context.state, "_symptom_tool_called")
 
     if not symptoms:
         return {
