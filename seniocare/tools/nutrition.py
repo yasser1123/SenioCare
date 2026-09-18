@@ -4,6 +4,7 @@ import json
 from google.adk.tools import ToolContext
 
 from seniocare.tools._guards import already_called_this_turn, mark_called
+from seniocare.tools._text import ingredient_contains, normalize_text
 from seniocare.data.database import get_connection
 
 
@@ -56,6 +57,7 @@ def get_meal_options(meal_type: str, tool_context: ToolContext) -> dict:
         # Step 2: Apply condition-based nutrient filtering
         filtered_meals = all_meals
         applied_rules = []
+        excluded_missing_data = []
 
         for condition in conditions:
             cursor.execute(
@@ -71,13 +73,22 @@ def get_meal_options(meal_type: str, tool_context: ToolContext) -> dict:
                     "max_values": max_values
                 })
 
-                # Filter meals that exceed the max values
+                # Filter meals that exceed the max values. A meal whose nutrient
+                # value is unknown (NULL) cannot be shown to pass a limit that
+                # exists for this user's condition: it is excluded and reported
+                # (AUDIT C-15 — previously NULL silently passed every rule).
                 new_filtered = []
                 for meal in filtered_meals:
                     passes = True
                     for nutrient, max_val in max_values.items():
-                        meal_value = meal.get(nutrient, 0)
-                        if meal_value is not None and meal_value > max_val:
+                        meal_value = meal.get(nutrient)
+                        if meal_value is None:
+                            excluded_missing_data.append({
+                                "meal": meal["name_ar"], "condition": condition, "missing_nutrient": nutrient,
+                            })
+                            passes = False
+                            break
+                        if meal_value > max_val:
                             passes = False
                             break
                     if passes:
@@ -93,12 +104,22 @@ def get_meal_options(meal_type: str, tool_context: ToolContext) -> dict:
                 [a.lower() for a in allergies]
             )
             allergen_foods = {row["food_name"].lower() for row in cursor.fetchall()}
+            # The allergy names themselves are also matched directly against the
+            # ingredients ("dairy" -> "dairy-free" no, "shrimp" -> "shrimp" yes).
+            allergen_foods |= {normalize_text(a) for a in allergies}
 
             safe_meals = []
             for meal in filtered_meals:
                 ingredients = json.loads(meal["ingredients"])
-                ingredient_names = [i.lower() for i in ingredients]
-                conflicting = [f for f in allergen_foods if f in ingredient_names]
+                # Word-level containment: "cheese" catches "cottage cheese",
+                # "wheat" catches "whole wheat bread" (AUDIT C-14). Exact-string
+                # matching only worked because the seed data enumerated the
+                # exact ingredient strings.
+                conflicting = sorted({
+                    f for f in allergen_foods
+                    for ingredient in ingredients
+                    if ingredient_contains(ingredient, f)
+                })
                 if conflicting:
                     excluded_by_allergy.append({
                         "meal": meal["name_ar"],
@@ -136,6 +157,8 @@ def get_meal_options(meal_type: str, tool_context: ToolContext) -> dict:
             "allergies_excluded": allergies,
             "options": options,
             "excluded_by_allergy": excluded_by_allergy if excluded_by_allergy else None,
+            "excluded_missing_nutrition_data": excluded_missing_data if excluded_missing_data else None,
+            "nutrition_data_complete": not excluded_missing_data,
             "total_found": len(options),
             "disclaimer": "استشر طبيبك قبل تغيير نظامك الغذائي"
         }
