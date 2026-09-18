@@ -23,10 +23,12 @@ Trigger sources:
 import json
 import re
 import uuid
-from datetime import datetime, timedelta
-from typing import Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Optional
 
+from seniocare import observability as obs
 from seniocare.data.database import get_connection
+from seniocare.observability import parse_intent, parse_safety_status
 
 
 # ---------------------------------------------------------------------------
@@ -192,79 +194,151 @@ async def _get_user_profile_from_session(user_id: str) -> dict:
         }
 
 
-async def _get_session_data_from_history(user_id: str) -> dict:
-    """Extract conversation data from the user's session history.
-
-    Reads recent session events to find conversation topics,
-    symptoms reported, meals/exercises discussed, etc.
-    """
-    session_data = {
+def _empty_session_data() -> dict:
+    return {
         "conversation_topics": [],
         "symptoms_reported": [],
         "meals_accessed": [],
         "exercises_accessed": [],
         "interaction_warnings": [],
         "emergency_events": [],
+        "sessions_in_period": 0,
+        "turns_in_period": 0,
     }
 
-    try:
-        from app.config import session_service
 
-        # List all sessions for this user
-        sessions = await session_service.list_sessions(
-            app_name="seniocare",
-            user_id=user_id,
-        )
+def _date_bounds(start_date: Optional[str], end_date: Optional[str]) -> tuple[Optional[float], Optional[float]]:
+    """ISO dates -> epoch seconds [start, end of end-day]. None when unset/unparseable."""
+    def parse(d: Optional[str], end: bool) -> Optional[float]:
+        if not d:
+            return None
+        try:
+            dt = datetime.fromisoformat(str(d))
+        except ValueError:
+            return None
+        if end and len(str(d)) <= 10:
+            dt = dt + timedelta(days=1) - timedelta(microseconds=1)
+        if dt.tzinfo is None:
+            dt = dt.astimezone()  # local time, like datetime.now() used by the schedulers
+        return dt.timestamp()
+    return parse(start_date, False), parse(end_date, True)
 
-        if not sessions or not sessions.sessions:
-            return session_data
 
-        # Collect orchestrator results from recent sessions
-        for session_info in sessions.sessions[-10:]:  # last 10 sessions
-            try:
-                session = await session_service.get_session(
-                    app_name="seniocare",
-                    user_id=user_id,
-                    session_id=session_info.id,
-                )
-                if not session:
-                    continue
+def _event_ts(event: Any) -> Optional[float]:
+    ts = getattr(event, "timestamp", None)
+    return float(ts) if isinstance(ts, (int, float)) else None
 
-                # Extract orchestrator intent from session state
-                orch_result = session.state.get("orchestrator_result", "")
-                if orch_result:
-                    import re
-                    intent_match = re.search(r"INTENT:\s*(\w+)", orch_result)
-                    if intent_match:
-                        intent = intent_match.group(1).lower()
-                        if intent not in session_data["conversation_topics"]:
-                            session_data["conversation_topics"].append(intent)
 
-                        if intent == "emergency":
-                            session_data["emergency_events"].append({
-                                "session_id": session_info.id,
-                                "timestamp": getattr(session_info, "last_update_time", ""),
-                            })
-
-                # Extract conversation snippets from events
-                if hasattr(session, "events"):
-                    for event in session.events[-6:]:
-                        if not hasattr(event, "content") or not event.content:
-                            continue
-                        if not event.content.parts:
-                            continue
-                        text = event.content.parts[0].text or ""
-                        if event.author == "user" and text.strip():
-                            session_data["conversation_topics"].append(
-                                text[:100]
-                            )
-
-            except Exception:
+def extract_session_facts(events: list, start_ts: Optional[float] = None, end_ts: Optional[float] = None,
+                          session_id: str = "") -> dict:
+    """Pure: walk one session's events inside [start_ts, end_ts] and collect what the
+    pipeline actually did — from the tool calls and responses it recorded, not from
+    guesses. This is what populates symptoms_reported, meals_accessed,
+    exercises_accessed and interaction_warnings (AUDIT C-08: they were declared,
+    read by the prompt, and never written)."""
+    facts = _empty_session_data()
+    turns = 0
+    for event in events or []:
+        ts = _event_ts(event)
+        if ts is not None and ((start_ts is not None and ts < start_ts) or (end_ts is not None and ts > end_ts)):
+            continue
+        author = getattr(event, "author", None)
+        content = getattr(event, "content", None)
+        parts = list(getattr(content, "parts", None) or []) if content else []
+        for part in parts:
+            text = getattr(part, "text", None)
+            if text and author == "user" and text.strip():
+                turns += 1
+                facts["conversation_topics"].append(text.strip()[:100])
+            if text and author == "orchestrator_agent":
+                intent = parse_intent(text)
+                status = parse_safety_status(text)
+                if intent and intent not in facts["conversation_topics"]:
+                    facts["conversation_topics"].append(intent)
+                if status == "EMERGENCY" or intent == "emergency":
+                    facts["emergency_events"].append({
+                        "session_id": session_id, "timestamp": _iso(ts), "trigger": "chat_emergency_detected",
+                    })
+            fc = getattr(part, "function_call", None)
+            if fc is not None and getattr(fc, "name", None) == "assess_symptoms":
+                args = dict(getattr(fc, "args", None) or {})
+                for sym in args.get("symptoms") or []:
+                    facts["symptoms_reported"].append({"symptom": str(sym), "timestamp": _iso(ts)})
+            fr = getattr(part, "function_response", None)
+            if fr is None or not getattr(fr, "name", None):
                 continue
+            resp = getattr(fr, "response", None) or {}
+            if not isinstance(resp, dict):
+                continue
+            name = fr.name
+            if name == "assess_symptoms" and resp.get("status") == "success":
+                top = (resp.get("matches") or [{}])[0]
+                facts["symptoms_reported"].append({
+                    "assessment": resp.get("overall_severity"), "top_match": top.get("disease_name"),
+                    "confidence": top.get("confidence"), "is_emergency": resp.get("is_emergency"), "timestamp": _iso(ts),
+                })
+            elif name == "get_meal_options" and resp.get("status") == "success":
+                for m in resp.get("options") or []:
+                    facts["meals_accessed"].append({"meal": m.get("name_ar") or m.get("name_en"), "timestamp": _iso(ts)})
+            elif name == "get_meal_recipe" and resp.get("status") == "success":
+                meal = resp.get("meal") or resp
+                facts["meals_accessed"].append({"meal": meal.get("name_ar") or meal.get("meal_id"), "recipe": True, "timestamp": _iso(ts)})
+            elif name == "get_exercises" and resp.get("status") == "success":
+                for ex in resp.get("exercises") or []:
+                    facts["exercises_accessed"].append({"exercise": ex.get("name_ar") or ex.get("name_en"), "timestamp": _iso(ts)})
+            elif name == "check_drug_food_interaction" and resp.get("status") == "success":
+                for h in resp.get("harmful_interactions") or []:
+                    facts["interaction_warnings"].append({
+                        "drug": h.get("drug"), "food": h.get("food"), "severity": h.get("severity"), "timestamp": _iso(ts),
+                    })
+    facts["turns_in_period"] = turns
+    facts["sessions_in_period"] = 1 if turns else 0
+    return facts
 
-    except Exception as e:
+
+def _iso(ts: Optional[float]) -> Optional[str]:
+    return datetime.fromtimestamp(ts).isoformat(timespec="seconds") if ts else None
+
+
+def _merge_facts(into: dict, facts: dict) -> None:
+    for key, value in facts.items():
+        if isinstance(value, list):
+            into[key].extend(value)
+        elif isinstance(value, (int, float)):
+            into[key] = into.get(key, 0) + value
+
+
+async def _get_session_data_from_history(
+    user_id: str, start_date: Optional[str] = None, end_date: Optional[str] = None,
+) -> dict:
+    """Conversation facts for `user_id` inside the report period (AUDIT C-07:
+    the period used to be ignored, so a daily and a monthly report saw the
+    same data)."""
+    session_data = _empty_session_data()
+    start_ts, end_ts = _date_bounds(start_date, end_date)
+    try:
+        from app.config import APP_NAME, session_service
+
+        listing = await session_service.list_sessions(app_name=APP_NAME, user_id=user_id)
+        if not listing or not listing.sessions:
+            return session_data
+        for info in listing.sessions:
+            if str(info.id).startswith("_"):
+                continue  # temp sessions
+            last = getattr(info, "last_update_time", None)
+            if start_ts is not None and isinstance(last, (int, float)) and last < start_ts:
+                continue  # untouched since before the period
+            try:
+                session = await session_service.get_session(app_name=APP_NAME, user_id=user_id, session_id=info.id)
+            except Exception:  # noqa: BLE001
+                continue
+            if not session:
+                continue
+            _merge_facts(session_data, extract_session_facts(getattr(session, "events", []), start_ts, end_ts, info.id))
+    except Exception as e:  # noqa: BLE001
         print(f"[Report] Could not extract session data for {user_id}: {e}")
-
+    # de-duplicate topic strings, keep order
+    session_data["conversation_topics"] = list(dict.fromkeys(session_data["conversation_topics"]))
     return session_data
 
 
@@ -297,8 +371,8 @@ async def aggregate_report_data(
     # Auto-fetch user profile from session state
     user_profile = await _get_user_profile_from_session(user_id)
 
-    # Auto-fetch session data from history
-    session_data = await _get_session_data_from_history(user_id)
+    # Auto-fetch session data from history, restricted to the period (C-07)
+    session_data = await _get_session_data_from_history(user_id, start_date, end_date)
 
     # Merge emergency context if provided (from callback)
     if emergency_context:
@@ -324,6 +398,17 @@ async def aggregate_report_data(
         "medical_reports_analyzed": medical_reports,
         "interaction_warnings": session_data.get("interaction_warnings", []),
         "emergency_events": session_data.get("emergency_events", []),
+    }
+    # Tell the Report Agent what is genuinely absent, so it says "no data"
+    # instead of inventing trends from empty arrays (AUDIT C-08).
+    empty = [k for k in ("symptoms_reported", "meals_accessed", "exercises_accessed",
+                         "interaction_warnings", "emergency_events", "medical_reports_analyzed")
+             if not aggregated.get(k)]
+    aggregated["data_coverage"] = {
+        "sessions_in_period": session_data.get("sessions_in_period", 0),
+        "turns_in_period": session_data.get("turns_in_period", 0),
+        "fields_with_no_data": empty,
+        "note": "Fields listed in fields_with_no_data had NO records in this period. State that plainly; do not infer trends from them.",
     }
 
     return aggregated
@@ -456,19 +541,30 @@ async def _call_report_agent(aggregated_data: dict) -> str:
         parts=[types.Part(text=prompt)],
     )
 
-    # Run the agent and collect the response
-    response_text = ""
+    # Run the agent and keep the FINAL response only. Concatenating every
+    # event's text (the previous behaviour, AUDIT R-05) could stitch partial
+    # or intermediate outputs into the stored report.
+    final_text = ""
+    all_text = ""
     async for event in runner.run_async(
         user_id="system",
         session_id=session.id,
         new_message=message,
     ):
-        if event.content and event.content.parts:
-            for part in event.content.parts:
-                if part.text:
-                    response_text += part.text
+        if not (event.content and event.content.parts):
+            continue
+        chunk = "".join(part.text for part in event.content.parts if getattr(part, "text", None))
+        if not chunk:
+            continue
+        all_text += chunk
+        try:
+            is_final = event.is_final_response()
+        except Exception:  # noqa: BLE001
+            is_final = False
+        if is_final and getattr(event, "author", None) == report_agent.name:
+            final_text = chunk
 
-    return response_text.strip()
+    return (final_text or all_text).strip()
 
 
 def _parse_markdown_report(
@@ -498,9 +594,11 @@ def _parse_markdown_report(
                 raw_text = raw_text[8:]
         raw_text = raw_text.strip()
 
-    # Extract STATUS line
-    overall_status = "moderate"
-    status_match = re.search(r"^STATUS:\s*(\w+)", raw_text, re.MULTILINE)
+    # Extract STATUS line. An absent or unrecognised value is "unknown" and is
+    # recorded as a parse failure; it used to default to "moderate", which
+    # caregivers would read as a real assessment (AUDIT C-10).
+    overall_status = "unknown"
+    status_match = re.search(r"^\**\s*STATUS\s*[:：]\s*\**\s*([A-Za-z]+)", raw_text, re.MULTILINE | re.IGNORECASE)
     if status_match:
         status_val = status_match.group(1).lower().strip()
         if status_val in ("good", "moderate", "concerning", "critical"):
@@ -508,6 +606,8 @@ def _parse_markdown_report(
         # Remove the STATUS line from content
         raw_text = raw_text[:status_match.start()] + raw_text[status_match.end():]
         raw_text = raw_text.strip()
+    obs.emit("report_parse", report_type=report_type, ok=overall_status != "unknown",
+             status=overall_status, chars=len(raw_text))
 
     # Extract title from first line containing report emoji
     title = _extract_title(raw_text, report_type, user_profile)
