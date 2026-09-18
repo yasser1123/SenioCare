@@ -97,10 +97,14 @@ def _install_ollama():
     install script as a fallback. Errors are printed, never hidden."""
     if _have("ollama"):
         return
+    # Ollama >= 0.10 ships zstd-compressed bundles; both install paths need zstd.
+    if not _have("zstd"):
+        print("Installing zstd …")
+        subprocess.run("apt-get update -qq >/dev/null 2>&1; apt-get install -y -qq zstd >/dev/null 2>&1", shell=True)
     print("Installing Ollama (tarball) …")
     r = subprocess.run(
-        "curl -fL --retry 3 https://ollama.com/download/ollama-linux-amd64.tgz -o /tmp/ollama.tgz "
-        "&& tar -C /usr -xzf /tmp/ollama.tgz",
+        "curl -fL --retry 3 https://ollama.com/download/ollama-linux-amd64.tar.zst -o /tmp/ollama.tar.zst "
+        "&& tar --zstd -C /usr -xf /tmp/ollama.tar.zst",
         shell=True, capture_output=True, text=True)
     if r.returncode != 0 or not _have("ollama"):
         print("tarball install failed:", (r.stderr or r.stdout)[-1500:])
