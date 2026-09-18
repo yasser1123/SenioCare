@@ -64,13 +64,35 @@ def _require_database_url() -> str:
 # ---------------------------------------------------------------------------
 
 
+# Neon's connection pooler occasionally accepts the TCP handshake and then never
+# completes the PostgreSQL startup exchange. Without a connect timeout that call
+# blocks forever (observed: test suite hanging with 0% CPU). Bound it, and keep
+# the TCP session alive so idle pooled connections are not silently dropped.
+CONNECT_TIMEOUT_S = int(os.environ.get("APP_DATABASE_CONNECT_TIMEOUT_S", "10"))
+_CONNECT_KWARGS = {
+    "connect_timeout": CONNECT_TIMEOUT_S,
+    "keepalives": 1,
+    "keepalives_idle": 30,
+    "keepalives_interval": 10,
+    "keepalives_count": 3,
+}
+
+
+def _connect(url: str, **kwargs):
+    return psycopg2.connect(url, **_CONNECT_KWARGS, **kwargs)
+
+
 def get_connection() -> psycopg2.extensions.connection:
-    """Return a new psycopg2 connection using RealDictCursor (retries once on transient SSL/network drop)."""
+    """Return a new psycopg2 connection using RealDictCursor.
+
+    Retries once on OperationalError (transient SSL/network drop, or a connect
+    that hit CONNECT_TIMEOUT_S).
+    """
     url = _require_database_url()
     try:
-        return psycopg2.connect(url, cursor_factory=RealDictCursor)
+        return _connect(url, cursor_factory=RealDictCursor)
     except psycopg2.OperationalError:
-        return psycopg2.connect(url, cursor_factory=RealDictCursor)
+        return _connect(url, cursor_factory=RealDictCursor)
 
 
 # ---------------------------------------------------------------------------
@@ -84,7 +106,7 @@ def _initialize_database() -> None:
     if _initialized:
         return
 
-    conn = psycopg2.connect(_require_database_url())
+    conn = _connect(_require_database_url())
     cursor = conn.cursor()
 
     try:
@@ -353,7 +375,7 @@ def _seed_exercises(cursor) -> None:
 
 def reset_database() -> None:
     """Drop and recreate all tables. Use only in testing/dev environments."""
-    conn = psycopg2.connect(_require_database_url())
+    conn = _connect(_require_database_url())
     cursor = conn.cursor()
     try:
         tables = [
