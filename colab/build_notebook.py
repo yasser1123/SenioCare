@@ -117,11 +117,19 @@ def _install_ollama():
 
 if BACKEND == "ollama":
     _install_ollama()
+    # Ollama serves a 4,096-token context by default, whatever the model supports.
+    # SenioCare's Orchestrator prompt alone is ~3.8k tokens: with the default the
+    # model got ~300 tokens to answer and hit MAX_TOKENS on every turn
+    # (docs/FINDINGS.md F-10). 16k leaves room for prompt + reasoning + plan.
     env = dict(os.environ,
                OLLAMA_HOST="0.0.0.0:11434",
+               OLLAMA_CONTEXT_LENGTH="16384",
                OLLAMA_KEEP_ALIVE="-1",        # never unload the model between requests
                OLLAMA_NUM_PARALLEL="2",
                OLLAMA_FLASH_ATTENTION="1")
+    # A server from an earlier run of this cell would keep the old context length.
+    subprocess.run(["pkill", "-f", "ollama serve"], capture_output=True)
+    time.sleep(2)
     SERVER = subprocess.Popen(["ollama", "serve"], env=env,
                               stdout=open("/tmp/ollama.log", "w"), stderr=subprocess.STDOUT)
     _wait_for("http://127.0.0.1:11434/api/tags", label="Ollama")

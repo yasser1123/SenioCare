@@ -150,6 +150,32 @@ Token-priced cost at the reference model (`gemini/gemini-2.5-flash` list price):
 
 ---
 
+## F-10 · The deployed model configuration left the Orchestrator ~317 output tokens
+
+**Observation.** Baseline run, 60/60 turns: the Orchestrator's output was the model's own reasoning narrative ("Here's a thinking process that leads to the desired output…"), cut off mid-sentence; the structured `SAFETY_STATUS` / `INTENT` block never appeared on 54 of 60 turns.
+
+**Evidence** (`evals/results/baseline-colab/results.jsonl`, observability `llm_call` records):
+
+| stage | prompt tokens (median) | completion tokens (median / max) | finish_reason |
+|---|---|---|---|
+| orchestrator | 3,779 | 317 / 343 | `MAX_TOKENS` on **60/60** calls |
+| feature | 2,051 | 464 / 1,706 | `STOP` 98/98 |
+| formatter | 2,547 | 955 / 1,571 | `MAX_TOKENS` 15/60 |
+
+3,779 + 317 = 4,096. Ollama 0.34 serves every model with a **4,096-token context window** unless `OLLAMA_CONTEXT_LENGTH` (or a per-request `num_ctx`) says otherwise, regardless of the model's advertised 131k limit (`/api/show` → `gemma4.context_length: 131072`). The Orchestrator's system prompt fills 92 % of that window; the model's thinking consumes the remainder and generation stops. Nothing in the app checked `finish_reason`, so every truncated turn looked like a normal answer: the Feature Agent received a fragment of reasoning as its "plan", the Formatter still produced fluent Arabic (F-04), and routing accuracy was 13.6 % with `intent = unknown` on 90 % of turns.
+
+**Implication.** The pipeline as deployed never executed its own design with this model on this server configuration. The audit's C-02/C-03 findings (routing by prose, strict parser) were real, but the dominant failure was one level below them: the model was never given room to answer. A code-only fix (Phase 4) cannot show its effect under this configuration, which is why the first post-fix run was stopped.
+
+**Action.**
+- Backend: `MODEL_NAME=ollama_chat/gemma4:e4b`, `MODEL_API_BASE=<Ollama root>`, `MODEL_EXTRA_JSON={"num_ctx": 16384}` — LiteLLM's Ollama provider forwards `num_ctx` per request; the OpenAI-compatible `/v1` route cannot.
+- Colab notebook: `OLLAMA_CONTEXT_LENGTH=16384` on the server so `/v1` clients get it too.
+- Observability already records `finish_reason`; `metrics_report.py` and the eval summary now surface `MAX_TOKENS` counts per stage so this cannot hide again.
+- Experiment design becomes 2×2: {baseline code, fixed code} × {4k context, 16k context}. Run A (baseline, 4k) is done; runs A′ (baseline, 16k) and C (fixed, 16k) follow; B (fixed, 4k) was abandoned as uninformative.
+
+**Paper use.** Headline finding for the deployment section: prompt-size versus context-window is a silent, configuration-level failure mode that no prompt or code review catches; only per-call `finish_reason` telemetry exposed it.
+
+---
+
 ## Open items being tracked
 
 | Item | Status | Where it will be answered |
