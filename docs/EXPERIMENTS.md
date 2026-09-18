@@ -2,6 +2,17 @@
 
 What was run, on what, with which commands, so the numbers in `docs/RESULTS.md` can be reproduced. Written for the paper's Method section.
 
+## 0. Design: 2 × 2 (code × context window)
+
+The first baseline run exposed a configuration variable that dominates everything else: Ollama's default 4,096-token context (`docs/FINDINGS.md` F-10). The experiment is therefore a 2 × 2:
+
+| | 4k context (Ollama default) | 16k context (`OLLAMA_CONTEXT_LENGTH=16384`) |
+|---|---|---|
+| **Baseline code** (tag `eval-baseline`) | **Run A** `baseline-colab` — done | **Run A′** `baseline-colab-16k` |
+| **Fixed code** (`feat/hardening`) | Run B — abandoned as uninformative (the Orchestrator cannot emit its output block in ~317 tokens, so no code change can show) | **Run C** `fixed-colab-16k` |
+
+A vs A′ isolates the deployment configuration; A′ vs C isolates the code changes; A vs C is "as deployed" vs "as hardened". Same 60 turns, same model, same tunnel host, same harness in all runs.
+
 ## 1. System under test
 
 | | Baseline | Post-fix |
@@ -23,6 +34,7 @@ The eval harness is not the system under test; both runs used the same `evals/ru
 |---|---|
 | Model | `gemma4:e4b` as packaged by Ollama (quantised GGUF), served by Ollama on **Google Colab, Tesla T4 (15 GB)** |
 | Transport | Ollama's OpenAI-compatible `/v1/chat/completions` through a cloudflared quick tunnel; the backend used LiteLLM `openai/gemma4:e4b` with `MODEL_API_BASE=https://<tunnel>/v1` |
+| Context window | Run A: Ollama default 4,096 tokens (`/api/ps` → `context_length: 4096`). Runs A′/C: server started with `OLLAMA_CONTEXT_LENGTH=16384` (`/api/ps` → 16384, verified after a plain `/v1` request). The `ollama_chat/` route with a per-request `num_ctx` was tried and rejected: gemma4 re-called tools instead of using their results through LiteLLM's Ollama message translation, and ADK's tool loop then spun. |
 | Sampling | provider defaults (no temperature / max_tokens set in either run) |
 | Timeout | 120 s per model call (`MODEL_TIMEOUT_S`), 420 s per turn in the harness |
 | Backend host | Windows 10 laptop running the FastAPI/ADK process in-process (harness mode `adk`), Postgres on Neon (us-east-1) |
@@ -45,12 +57,17 @@ git worktree add ../SenioCare-baseline eval-baseline
 cp .env ../SenioCare-baseline/.env && cp evals/runner.py ../SenioCare-baseline/evals/runner.py
 cd ../SenioCare-baseline && python evals/runner.py --name baseline-colab
 
-# Post-fix — on the branch
+# Post-fix — on the branch (server restarted with OLLAMA_CONTEXT_LENGTH=16384 first)
 python scripts/check_model.py --adk          # gate, after every Colab restart
-python evals/runner.py --name fixed-colab
+python evals/runner.py --name fixed-colab-16k
+
+# Baseline code, 16k context (A′) — from the worktree
+cd ../SenioCare-baseline && python evals/runner.py --name baseline-colab-16k
 
 # Comparison table
-python evals/compare.py baseline-colab fixed-colab --out docs/results_compare.md
+python evals/compare.py baseline-colab fixed-colab-16k --out docs/results_compare.md
+python evals/compare.py baseline-colab baseline-colab-16k     # context effect alone
+python evals/compare.py baseline-colab-16k fixed-colab-16k    # code effect alone
 
 # Per-stage latency/token/cost tables for a run window (from llm_traces, when the
 # app or the harness wrote to Postgres) — the harness also stores per-turn metrics
