@@ -98,7 +98,35 @@ if _TEST_DB_URL:
     os.environ["APP_DATABASE_URL"] = _TEST_DB_URL
 
 # Now safe to import seniocare modules
-from seniocare.data.database import get_connection, reset_database  # noqa: E402
+from seniocare.data.database import (  # noqa: E402
+    DATABASE_URL as _APP_DB_URL,
+    get_connection,
+    reset_database,
+)
+
+# Which database, if any, will the tool tests hit?
+#   TEST_DATABASE_URL  -> disposable DB, reset + reseeded once per run (preferred)
+#   APP_DATABASE_URL   -> whatever .env points at (read-only queries, but slow and
+#                         NOT isolated - fine for local runs, never for CI)
+#   neither            -> every DB-backed test is skipped with a clear reason
+_DB_AVAILABLE = bool(_TEST_DB_URL or _APP_DB_URL)
+
+# Test modules whose tests all require a live PostgreSQL database. The tools
+# under seniocare/tools/ open a connection on every call, so "unit" tests of
+# those tools are DB tests in practice.
+_DB_TEST_DIRS = ("tests/unit/", "tests/integration/test_multi_tool_flows.py", "tests/test_database_tools.py")
+
+
+def pytest_collection_modifyitems(config, items):
+    if _DB_AVAILABLE:
+        return
+    skip = pytest.mark.skip(
+        reason="No database configured - set TEST_DATABASE_URL (or APP_DATABASE_URL) to run DB-backed tests"
+    )
+    for item in items:
+        rel = str(item.fspath).replace("\\", "/")
+        if any(marker in rel for marker in _DB_TEST_DIRS):
+            item.add_marker(skip)
 
 
 # ---------------------------------------------------------------------------

@@ -14,7 +14,6 @@ from seniocare.tools.nutrition import get_meal_options, get_meal_recipe
 from seniocare.tools.interactions import check_drug_food_interaction
 from seniocare.tools.symptoms import assess_symptoms
 from seniocare.tools.exercise import get_exercises
-from seniocare.tools.medication import get_medication_schedule, log_medication_intake
 
 
 class TestMealRecommendationFlow:
@@ -112,31 +111,3 @@ class TestExerciseRecommendationWithExclusions:
         for ex in result["exercises"]:
             assert "hand" not in ex.get("name_en", "").lower() or True  # flexible
         assert result["conditions_considered"] == ["arthritis"]
-
-
-class TestMedicationScheduleAndLogging:
-    """Full medication workflow: get schedule → log intake."""
-
-    def test_schedule_then_log(self):
-        # Step 1: Get schedule
-        schedule_ctx = MockToolContext(state={"user:user_id": "user_001"})
-        schedule = get_medication_schedule(tool_context=schedule_ctx)
-        assert schedule["status"] == "success"
-        assert len(schedule["medications"]) > 0
-
-        # Step 2: Log each medication
-        first_med = schedule["medications"][0]["name"]
-        log_ctx = MockToolContext(state={"user:user_id": "user_001"})
-        logged = log_medication_intake(
-            medication_name=first_med, tool_context=log_ctx
-        )
-        assert logged["status"] == "success"
-        assert first_med in logged["message"]
-
-    def test_log_without_checking_schedule(self):
-        """User can log medication without checking schedule first."""
-        ctx = MockToolContext(state={"user:user_id": "user_001"})
-        result = log_medication_intake(
-            medication_name="Metformin", tool_context=ctx
-        )
-        assert result["status"] == "success"

@@ -55,3 +55,7 @@ sessions.db
 .DS_Store
 Thumbs.db
 .aider*
+
+# Scratch / notebooks that are not part of the project
+.gemini_scratch/
+Gemma4_ADK_Server*.ipynb
