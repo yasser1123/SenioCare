@@ -17,7 +17,7 @@ import uvicorn
 from dotenv import load_dotenv
 from google.adk.cli.fast_api import get_fast_api_app
 
-from app.config import SESSION_DB, MEMORY_SERVICE_URI, ALLOWED_ORIGINS, SERVE_WEB_INTERFACE, APP_VERSION
+from app.config import SESSION_DB, MEMORY_SERVICE_URI, ALLOWED_ORIGINS, SERVE_WEB_INTERFACE, APP_VERSION, MODEL_INFO
 from app.openapi import make_custom_openapi
 from app.routers import health, sessions, chat_history, user_profile, reports
 from app.scheduler import setup_scheduler, shutdown_scheduler
@@ -117,9 +117,11 @@ if __name__ == "__main__":
     GET  /reports/{{user_id}}/{{report_id}} - Report detail
     GET  /reports/medical/{{user_id}}   - Medical image reports
 
-    GET  /health              - Health check
+    GET  /health              - Health check (?probe=full to call the model)
     GET  /docs                - Swagger UI
 
+  Model      : {MODEL_INFO['model']}  ({MODEL_INFO['location']})
+  Model URL  : {MODEL_INFO['api_base'] or 'provider default'}
   Session DB : {db_label}
   Memory     : {mem_label}
   Scheduler  : Daily 23:00 | Weekly Sun 23:00 | Monthly 1st 23:00

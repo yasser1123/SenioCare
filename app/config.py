@@ -31,6 +31,18 @@ FIREBASE_CREDENTIALS_PATH = os.environ.get(
 )
 
 # =============================================================================
+# MODEL
+# =============================================================================
+# Resolved in seniocare/model.py from MODEL_NAME / MODEL_API_BASE / MODEL_API_KEY
+# (and the older OLLAMA_MODEL / OLLAMA_BASE_URL). Re-exported here so the
+# banner and /health can show it without importing the agent package.
+
+from seniocare.model import describe_model as _describe_model  # noqa: E402
+
+MODEL_INFO = _describe_model()
+MODEL_NAME = MODEL_INFO["model"]
+
+# =============================================================================
 # SESSION DATABASE URL
 # =============================================================================
 # ADK's DatabaseSessionService requires the +asyncpg driver prefix.

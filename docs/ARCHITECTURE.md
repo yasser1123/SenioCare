@@ -158,10 +158,23 @@ Emits markdown prefixed by a `STATUS:` line, parsed at `reports.py:503`.
 
 ## 4. Model configuration
 
-All four agents use the same model, hardcoded in four separate files:
+All four agents call `get_model()` in `seniocare/model.py`, which builds one `LiteLlm` from the environment:
 
-| Agent | File:line | Model |
-|---|---|---|
+| Variable | Effect |
+|---|---|
+| `MODEL_NAME` | LiteLLM model string; provider prefix decides the client (`ollama_chat/`, `openai/`, `hosted_vllm/`, `gemini/`, …). Default `ollama_chat/gemma4:e4b` |
+| `MODEL_API_BASE` | Endpoint for self-hosted / OpenAI-compatible servers. Ollama root for `ollama_chat/`, `…/v1` for `openai/` and `hosted_vllm/` |
+| `MODEL_API_KEY` | Provider key. For `openai/` and `hosted_vllm/` with a base URL and no key, a placeholder is sent because the client refuses an empty key |
+| `MODEL_TIMEOUT_S` | Per-request timeout forwarded to `litellm.completion` (default 120) |
+| `MODEL_TEMPERATURE`, `MODEL_MAX_TOKENS`, `MODEL_EXTRA_JSON` | Sampling parameters; unset means provider default |
+
+`LiteLlm.__init__(model, **kwargs)` stores every kwarg and merges it into each `litellm.completion` call (`google/adk/models/lite_llm.py`, `_additional_args`), which is how the base URL, key, timeout and sampling parameters reach the provider.
+
+**Where the model runs is irrelevant to the tools.** ADK serialises the ten tool functions into JSON schemas for the request; the model returns tool-call requests; ADK executes the Python in this process and sends results back. A remote model therefore needs no tool changes, only `MODEL_API_BASE`.
+
+`GET /health` reports the resolved configuration and probes the model server; `python scripts/check_model.py` runs a completion and a tool-call round trip with the exact settings the agents use.
+
+---|---|---|
 | Orchestrator | `orchestrator_agent.py:315` | `ollama_chat/gemma4:e4b` |
 | Feature | `feature_agent.py:309` | `ollama_chat/gemma4:e4b` |
 | Formatter | `formatter_agent.py:231` | `ollama_chat/gemma4:e4b` |

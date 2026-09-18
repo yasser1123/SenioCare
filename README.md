@@ -2,7 +2,7 @@
 
 An AI healthcare assistant for elderly Egyptian users. A three-stage agent pipeline screens each message for safety, gathers data from a health database, and replies in Egyptian Arabic.
 
-Built on the [Google Agent Development Kit](https://google.github.io/adk-docs/) (ADK 1.22.0) with FastAPI and PostgreSQL. Models run locally through Ollama.
+Built on the [Google Agent Development Kit](https://google.github.io/adk-docs/) (ADK 1.22.0) with FastAPI and PostgreSQL. The model is reached through LiteLLM and configured by environment: local Ollama by default, or any remote OpenAI-compatible server (for example a GPU on Colab) or hosted provider.
 
 > **Status: graduation project, not production software.** It has no authentication, and a documented set of correctness and safety defects. Read [`docs/AUDIT.md`](docs/AUDIT.md) before deploying it anywhere or connecting it to real patient data.
 
@@ -64,14 +64,14 @@ All three stages run on **every** request. There is no conditional bypass — bl
 
 ### Agents
 
-| Agent | Model | Role |
-|---|---|---|
-| Orchestrator | `ollama_chat/gemma4:e4b` | Safety, intent, planning |
-| Feature | `ollama_chat/gemma4:e4b` | Tool execution and selection |
-| Formatter | `ollama_chat/gemma4:e4b` | Egyptian Arabic rendering |
-| Report | `ollama_chat/gemma4:e4b` | Health report generation |
+| Agent | Role |
+|---|---|
+| Orchestrator | Safety, intent, planning |
+| Feature | Tool execution and selection |
+| Formatter | Egyptian Arabic rendering |
+| Report | Health report generation |
 
-The model name is hardcoded in each agent file and cannot be changed by configuration. See [Known limitations](#known-limitations).
+All four use the same model, built once by `get_model()` in `seniocare/model.py` from the `MODEL_*` environment variables (default `ollama_chat/gemma4:e4b` on a local Ollama). See [Model configuration](#model-configuration).
 
 ### Tools
 
@@ -92,16 +92,32 @@ The ten tools registered on the Feature Agent (`seniocare/sub_agents/feature_age
 
 ---
 
+## Model configuration
+
+The backend consumes the model like an external API. Tools, prompts, sessions and the database run here; only inference happens wherever `MODEL_API_BASE` points. The model receives tool *schemas* and returns tool-call requests that ADK executes in this process, so moving inference needs no tool changes.
+
+| Target | `MODEL_NAME` | `MODEL_API_BASE` | `MODEL_API_KEY` |
+|---|---|---|---|
+| Local Ollama (default) | `ollama_chat/gemma4:e4b` | *(blank)* | *(blank)* |
+| Ollama on Colab | `openai/gemma4:e4b` | `https://<tunnel>/v1` | *(blank)* |
+| vLLM on Colab | `hosted_vllm/google/gemma-3-4b-it` | `https://<tunnel>/v1` | *(blank)* |
+| Google AI Studio | `gemini/gemini-2.5-flash` | *(blank)* | your key |
+| Groq, OpenRouter, any OpenAI-compatible | `openai/<model>` | provider URL | provider key |
+
+Optional: `MODEL_TIMEOUT_S` (default 120), `MODEL_TEMPERATURE`, `MODEL_MAX_TOKENS`, `MODEL_EXTRA_JSON` for any other `litellm.completion` kwarg. The Colab notebook in `colab/` serves the model and prints these three lines to paste; `python scripts/check_model.py` verifies connectivity and tool calling before you start the app.
+
+---
+
 ## Getting started
 
 ### Prerequisites
 
 - **Python 3.10+**
-- **[Ollama](https://ollama.com/)** with the model pulled:
+- **A model server.** By default [Ollama](https://ollama.com/) on this machine with the model pulled:
   ```bash
   ollama pull gemma4:e4b
   ```
-  Required. All four agents call it and there is no hosted fallback.
+  Or point `MODEL_API_BASE` at a remote server — see [Model configuration](#model-configuration).
 - **PostgreSQL** — two databases (or two schemas): one for tools data, one for ADK sessions. [Neon](https://neon.tech/) works.
 - *Optional:* **SerpAPI key** — without it the three search tools return a structured error and the rest of the pipeline continues.
 - *Optional:* **Firebase service-account JSON** — without it push notifications are skipped with a warning (`app/notifications.py:74-79`).
@@ -171,7 +187,7 @@ Responses stream as SSE events. Render events whose `author` is `formatter_agent
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/health` | Static status and version. Does not check DB or Ollama |
+| `GET` | `/health` | Config plus live checks: DB `SELECT 1`, model-server reachability. `?probe=full` also sends a one-token completion |
 | `POST` | `/create-session` | Create a session, returns `session_id` |
 | `GET` | `/chat-history/{user_id}` | List conversations with headlines |
 | `GET` | `/chat-history/{user_id}/{session_id}` | Full turns for one conversation |
@@ -267,11 +283,10 @@ Honest summary. Full detail in [`docs/AUDIT.md`](docs/AUDIT.md).
 - No Docker, no CI, no migrations, no linter, no type checker.
 - No tracing, metrics, or token/cost accounting; the two configured loggers emit nothing.
 - Synchronous database and HTTP calls block the async event loop.
-- No connection pooling; no timeout on any LLM call.
+- Database connections are pooled with connect/query deadlines (`seniocare/data/database.py`); LLM calls have a per-request timeout (`MODEL_TIMEOUT_S`) but no retry.
 - Dependencies are unpinned (`>=` only), with no lock file.
 
 **Configuration**
-- The model name is hardcoded in four files with no environment override and no `OLLAMA_API_BASE` setting.
 - The Orchestrator prompt documents two tools that do not exist and two models that are not configured.
 
 ---
