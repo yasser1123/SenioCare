@@ -6,6 +6,7 @@ after_agent_callback   → auto_save_to_memory  (memory save + headline generato
 """
 
 import asyncio
+import os
 import re
 from datetime import datetime
 
@@ -15,6 +16,17 @@ from seniocare.observability import parse_intent, parse_safety_status
 # =============================================================================
 # TEST USER (used when no backend has pushed a profile)
 # =============================================================================
+# Injected ONLY when DEV_TEST_USER=1. Previously any request without a profile
+# silently received this fabricated 72-year-old diabetic (AUDIT C-11), so an
+# unregistered user could be served meal and drug advice for someone else's
+# conditions. Without the flag a missing profile is passed through as such.
+
+DEV_TEST_USER = os.environ.get("DEV_TEST_USER", "").strip().lower() in ("1", "true", "yes")
+
+# Background emergency tasks are kept here until they finish. asyncio only
+# holds a weak reference to tasks created with create_task(), so a
+# fire-and-forget task can be garbage-collected mid-flight (AUDIT C-09).
+_BACKGROUND_TASKS: set = set()
 
 TEST_USER_PROFILE = {
     "user:user_id":         "test_user_001",
@@ -88,15 +100,19 @@ async def populate_user_data(callback_context):
     state = callback_context.state
     obs.turn_started(callback_context)
 
-    # Load test profile if no real user profile is present
+    # Load the test profile only when explicitly enabled (AUDIT C-11)
     if not state.get("user:user_id"):
-        for key, value in TEST_USER_PROFILE.items():
-            state[key] = value
-        print(
-            f"[SenioCare] Test user loaded: {TEST_USER_PROFILE['user:user_name']} "
-            f"(diseases: {TEST_USER_PROFILE['user:chronicDiseases']}, "
-            f"meds: {[m['name'] for m in TEST_USER_PROFILE['user:medications']]})"
-        )
+        if DEV_TEST_USER:
+            for key, value in TEST_USER_PROFILE.items():
+                state[key] = value
+            print(
+                f"[SenioCare] DEV_TEST_USER=1: test user loaded: {TEST_USER_PROFILE['user:user_name']} "
+                f"(diseases: {TEST_USER_PROFILE['user:chronicDiseases']}, "
+                f"meds: {[m['name'] for m in TEST_USER_PROFILE['user:medications']]})"
+            )
+        else:
+            state["profile_missing"] = True
+            obs.emit("profile_missing", session_id=getattr(getattr(callback_context, "session", None), "id", None))
 
     # Ensure preferences dict exists
     if not state.get("user:preferences"):
@@ -247,8 +263,8 @@ async def _trigger_emergency_report(state: dict, orchestrator_output: str) -> No
             "conversation_topics": state.get("conversation_history", "").split("\n"),
         }
 
-        # Fire-and-forget background task
-        asyncio.create_task(
+        # Background task, kept referenced until done (AUDIT C-09)
+        task = asyncio.create_task(
             _generate_and_notify_emergency(
                 user_id=user_id,
                 user_name=user_name,
@@ -256,10 +272,32 @@ async def _trigger_emergency_report(state: dict, orchestrator_output: str) -> No
                 caregivers=caregivers,
             )
         )
+        _BACKGROUND_TASKS.add(task)
+        task.add_done_callback(_on_emergency_task_done)
+        state["emergency_task_started"] = True
         print(f"[SenioCare] Emergency report + notification auto-triggered for {user_id}")
 
     except Exception as e:
         print(f"[SenioCare] Emergency report trigger failed: {e}")
+
+
+def _on_emergency_task_done(task: "asyncio.Task") -> None:
+    _BACKGROUND_TASKS.discard(task)
+    if task.cancelled():
+        obs.emit("emergency_task", ok=False, error="cancelled")
+        return
+    exc = task.exception()
+    if exc is not None:
+        obs.emit("emergency_task", ok=False, error=f"{type(exc).__name__}: {exc}"[:200])
+        print(f"[SenioCare] Emergency background task failed: {exc}")
+    else:
+        obs.emit("emergency_task", ok=True)
+
+
+async def wait_for_background_tasks(timeout: float = 30.0) -> None:
+    """Await outstanding emergency tasks (app shutdown, tests)."""
+    if _BACKGROUND_TASKS:
+        await asyncio.wait(list(_BACKGROUND_TASKS), timeout=timeout)
 
 
 async def _generate_and_notify_emergency(
