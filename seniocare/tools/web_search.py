@@ -17,11 +17,15 @@ content extraction when needed.
 """
 
 import os
+import time
+
 import requests
 from bs4 import BeautifulSoup
 from typing import Optional
 from dotenv import load_dotenv
 from google.adk.tools import ToolContext
+
+from seniocare import observability as obs
 
 load_dotenv()
 
@@ -156,7 +160,11 @@ def _search_serpapi(query: str, engine: str = "google", **kwargs) -> dict:
     }
     
     try:
+        t0 = time.perf_counter()
         response = requests.get(SERPAPI_URL, params=params, timeout=15)
+        obs.emit("serpapi_call", engine=engine, http_status=response.status_code,
+                 latency_ms=round((time.perf_counter() - t0) * 1000),
+                 cost=obs.SERPAPI_USD_PER_SEARCH, ok=response.status_code == 200)
         data = response.json()
         
         if "error" in data:

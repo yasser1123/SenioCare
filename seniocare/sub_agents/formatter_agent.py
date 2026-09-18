@@ -9,6 +9,7 @@ EMERGENCY responses relayed from the Orchestrator.
 
 from google.adk.agents import LlmAgent
 from seniocare.model import get_model
+from seniocare.observability import stage_callbacks
 
 FORMATTER_INSTRUCTION = """
 ================================================================================
@@ -229,6 +230,7 @@ SECTION 6: CRITICAL RULES
 formatter_agent = LlmAgent(
     name="formatter_agent",
     model=get_model(),
+    **stage_callbacks(),
     instruction=FORMATTER_INSTRUCTION,
     description="Formats final responses into warm Egyptian Arabic using structured templates with emoji headers. Handles normal, blocked, and emergency responses.",
     output_key="final_response",

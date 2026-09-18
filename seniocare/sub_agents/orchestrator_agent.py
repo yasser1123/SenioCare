@@ -11,6 +11,7 @@ Formatter (Feature Agent is skipped in those cases).
 
 from google.adk.agents import LlmAgent
 from seniocare.model import get_model
+from seniocare.observability import stage_callbacks
 
 ORCHESTRATOR_INSTRUCTION = """
 ================================================================================
@@ -313,6 +314,7 @@ EMERGENCY_MESSAGE: [Urgent guidance: call emergency services, stay calm, first-a
 orchestrator_agent = LlmAgent(
     name="orchestrator_agent",
     model=get_model(),
+    **stage_callbacks(),
     instruction=ORCHESTRATOR_INSTRUCTION,
     description="Evaluates safety, classifies intent, analyzes user profile, and creates a detailed task plan with tool references for the Feature Agent",
     output_key="orchestrator_result",

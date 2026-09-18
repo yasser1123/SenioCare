@@ -9,6 +9,8 @@ import asyncio
 import re
 from datetime import datetime
 
+from seniocare import observability as obs
+
 # =============================================================================
 # TEST USER (used when no backend has pushed a profile)
 # =============================================================================
@@ -83,6 +85,7 @@ async def populate_user_data(callback_context):
     it into state so the Orchestrator has context for follow-up questions.
     """
     state = callback_context.state
+    obs.turn_started(callback_context)
 
     # Load test profile if no real user profile is present
     if not state.get("user:user_id"):
@@ -194,6 +197,12 @@ async def auto_save_to_memory(callback_context):
     except Exception as e:
         print(f"[SenioCare] Memory save warning: {e}")
 
+    # --- Turn record (latency, tokens, cost, routing) ---
+    try:
+        obs.turn_finished(callback_context, emergency_triggered=(intent == "emergency"))
+    except Exception as e:
+        print(f"[SenioCare] Turn record warning: {e}")
+
 
 # =============================================================================
 # HELPERS
@@ -271,6 +280,8 @@ async def _generate_and_notify_emergency(
         )
         report_id = result.get("report_id", "unknown")
         print(f"[SenioCare] Emergency report generated: {report_id}")
+        obs.emit("emergency_report", user_hash=obs.hash_user_id(user_id), report_id=report_id,
+                 ok=result.get("status") != "error")
 
         # Step 2: Notify caregivers via FCM
         if caregivers:
@@ -289,8 +300,15 @@ async def _generate_and_notify_emergency(
                 f"{notif_result.get('sent', 0)} sent, "
                 f"{notif_result.get('failed', 0)} failed"
             )
+            obs.emit("emergency_notify", user_hash=obs.hash_user_id(user_id), report_id=report_id,
+                     sent=notif_result.get("sent", 0), failed=notif_result.get("failed", 0),
+                     caregivers=len(caregivers), ok=notif_result.get("sent", 0) > 0)
         else:
             print(f"[SenioCare] ⚠️ No caregivers registered for {user_id} — skipping notification")
+            obs.emit("emergency_notify", user_hash=obs.hash_user_id(user_id), report_id=report_id,
+                     sent=0, failed=0, caregivers=0, ok=False, reason="no_caregivers")
 
     except Exception as e:
         print(f"[SenioCare] Emergency report/notification failed: {e}")
+        obs.emit("emergency_notify", user_hash=obs.hash_user_id(user_id), ok=False,
+                 error=f"{type(e).__name__}: {e}"[:200])
