@@ -229,7 +229,7 @@ def setup_scheduler() -> None:
 
     _scheduler.start()
     logger.info("[Scheduler] Report scheduler started")
-    print("[Scheduler] ✅ Report scheduler started (daily/weekly/monthly)")
+    print("[Scheduler] Report scheduler started (daily/weekly/monthly)")
 
 
 def shutdown_scheduler() -> None:

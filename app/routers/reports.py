@@ -12,7 +12,7 @@ import uuid
 from typing import Optional
 from fastapi import APIRouter, HTTPException
 
-from app.config import session_service
+from app.config import APP_NAME, session_service
 from app.schemas.report import GenerateReportRequest
 
 router = APIRouter(prefix="/reports", tags=["Health Reports"])
@@ -103,7 +103,7 @@ async def _notify_caregivers_for_report(
         # Read caregiver data from the elder's session state
         temp_session_id = f"_notif_{uuid.uuid4().hex[:8]}"
         session = await session_service.create_session(
-            app_name="seniocare",
+            app_name=APP_NAME,
             user_id=user_id,
             session_id=temp_session_id,
         )
@@ -112,7 +112,7 @@ async def _notify_caregivers_for_report(
         elder_name = session.state.get("user:user_name", "المستخدم")
 
         await session_service.delete_session(
-            app_name="seniocare",
+            app_name=APP_NAME,
             user_id=user_id,
             session_id=temp_session_id,
         )
@@ -167,8 +167,14 @@ async def get_medical_reports(user_id: str):
     }
 
 
-@router.post("/seed")
+@router.post("/seed", include_in_schema=False)
 async def seed_test_data(user_id: str = "elder_123", clear: bool = False):
+    from app import auth as _auth
+
+    if _auth.AUTH_MODE != "off":
+        # A data-seeding (and, with clear=true, data-deleting) endpoint has no
+        # place in a protected deployment.
+        raise HTTPException(status_code=404, detail="Not found")
     """Inject sample test data into the database for testing.
 
     Call this once to populate the database with realistic Arabic

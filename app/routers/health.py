@@ -10,6 +10,7 @@ import time
 import httpx
 from fastapi import APIRouter, Query
 
+from app import auth as _auth
 from app.config import SESSION_DB, MEMORY_SERVICE_URI, APP_VERSION, MODEL_INFO
 from seniocare.model import model_settings, probe_url
 
@@ -128,6 +129,7 @@ async def health_check(
         "service": "seniocare-api",
         "version": APP_VERSION,
         "model": MODEL_INFO,
+        "auth": _auth.describe(),
         "session_db": db_type,
         "memory_service": memory_type,
         "checks": checks,

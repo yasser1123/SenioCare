@@ -23,10 +23,20 @@ from google.adk.cli.fast_api import get_fast_api_app
 
 from seniocare import observability as obs
 
+# Windows consoles default to a legacy code page; the app prints Arabic and the
+# scheduler used to print an emoji, which raised UnicodeEncodeError during
+# startup and aborted the lifespan (docs/FINDINGS.md F-07).
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 # JSON logging must be configured before anything else logs.
 obs.configure_logging()
 
 from app.config import SESSION_DB, MEMORY_SERVICE_URI, ALLOWED_ORIGINS, SERVE_WEB_INTERFACE, APP_VERSION, MODEL_INFO
+from app import auth as _auth_cfg
 from app.openapi import make_custom_openapi
 from app.routers import health, sessions, chat_history, user_profile, reports, metrics
 from app.scheduler import setup_scheduler, shutdown_scheduler
@@ -65,6 +75,15 @@ app.include_router(chat_history.router)
 app.include_router(user_profile.router)
 app.include_router(reports.router)
 app.include_router(metrics.router)
+
+# =============================================================================
+# AUTH — Firebase ID tokens + per-user authorisation on every route (AUDIT C-01)
+# =============================================================================
+from app import auth as _auth  # noqa: E402
+
+app.add_middleware(_auth.AuthMiddleware)
+if _auth.AUTH_MODE == "off":
+    print("[SenioCare] WARNING: AUTH_MODE=off — every endpoint is open. Set AUTH_MODE=firebase for any shared deployment.")
 
 # =============================================================================
 # OBSERVABILITY — trace id + request latency (Point C in docs/INSTRUMENTATION.md)
@@ -183,6 +202,7 @@ if __name__ == "__main__":
 
   Model      : {MODEL_INFO['model']}  ({MODEL_INFO['location']})
   Model URL  : {MODEL_INFO['api_base'] or 'provider default'}
+  Auth       : {_auth_cfg.AUTH_MODE.upper()}{'  <-- OPEN, dev only' if _auth_cfg.AUTH_MODE == 'off' else ''}
   Session DB : {db_label}
   Memory     : {mem_label}
   Scheduler  : Daily 23:00 | Weekly Sun 23:00 | Monthly 1st 23:00
