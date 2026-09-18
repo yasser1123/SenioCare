@@ -3,6 +3,7 @@
 from google.adk.tools import ToolContext
 
 from seniocare.tools._guards import already_called_this_turn, mark_called
+from seniocare.tools._text import normalize_drug_name, normalize_text, phrase_match
 from seniocare.data.database import get_connection
 
 
@@ -44,15 +45,17 @@ def check_drug_food_interaction(food_names: list, tool_context: ToolContext) -> 
             "interactions": []
         }
 
-    # Extract drug names from medications (handle both string list and dict list)
+    # Extract drug names from medications (handle both string list and dict list).
+    # Names are normalised ("Metformin 500mg" -> "metformin") so the join is not
+    # defeated by dose suffixes or brand/form words (AUDIT C-14).
     drug_names = []
     for med in user_medications:
-        if isinstance(med, dict):
-            drug_names.append(med.get("name", "").lower())
-        else:
-            drug_names.append(str(med).lower())
+        raw = med.get("name", "") if isinstance(med, dict) else str(med)
+        normalised = normalize_drug_name(raw)
+        if normalised and normalised not in drug_names:
+            drug_names.append(normalised)
 
-    food_names_lower = [f.lower() for f in food_names]
+    food_names_lower = [normalize_text(f) for f in food_names if str(f).strip()]
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -61,21 +64,27 @@ def check_drug_food_interaction(food_names: list, tool_context: ToolContext) -> 
         interactions_found = []
         safe_combinations = []
 
-        # Query for each drug-food combination
+        # One query for all of the user's drugs (was one query per drug x food,
+        # AUDIT R-02); food matching happens in Python at word level so
+        # "spinach salad" still hits the "spinach" row.
+        cursor.execute(
+            "SELECT * FROM drug_food_interactions WHERE LOWER(drug_name) = ANY(%s)",
+            (drug_names,),
+        )
+        rows_by_drug: dict = {}
+        for row in cursor.fetchall():
+            row = dict(row)
+            rows_by_drug.setdefault(normalize_drug_name(row["drug_name"]), []).append(row)
+
         for drug in drug_names:
             for food in food_names_lower:
-                cursor.execute("""
-                    SELECT * FROM drug_food_interactions
-                    WHERE LOWER(drug_name) = %s AND LOWER(food_name) = %s
-                """, (drug, food))
-
-                rows = cursor.fetchall()
-                if rows:
-                    for row in rows:
-                        row = dict(row)
+                hits = [r for r in rows_by_drug.get(drug, []) if phrase_match(food, r["food_name"])]
+                if hits:
+                    for row in hits:
                         interactions_found.append({
                             "drug": row["drug_name"],
                             "food": row["food_name"],
+                            "food_reported": food,
                             "effect": row["effect"],
                             "severity": row["severity"],
                             "conclusion": row["conclusion"],
