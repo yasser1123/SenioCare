@@ -1,44 +1,43 @@
 # SenioCare
 
-An AI healthcare assistant for elderly Egyptian users. A three-stage agent pipeline screens each message for safety, gathers data from a health database, and replies in Egyptian Arabic.
+An AI healthcare assistant for elderly Egyptian users. A three-stage agent pipeline screens each message for safety, gathers data from a health database, and replies in Egyptian Arabic. Every LLM call, tool call and turn is measured, and the pipeline's behaviour is scored by a reproducible evaluation suite.
 
-Built on the [Google Agent Development Kit](https://google.github.io/adk-docs/) (ADK 1.22.0) with FastAPI and PostgreSQL. The model is reached through LiteLLM and configured by environment: local Ollama by default, or any remote OpenAI-compatible server (for example a GPU on Colab) or hosted provider.
+Built on the [Google Agent Development Kit](https://google.github.io/adk-docs/) (ADK 1.22) with FastAPI and PostgreSQL. The model is reached through LiteLLM and configured by environment: local Ollama by default, or any remote OpenAI-compatible server (for example a GPU on Colab) or hosted provider.
 
-> **Status: graduation project, not production software.** It has no authentication, and a documented set of correctness and safety defects. Read [`docs/AUDIT.md`](docs/AUDIT.md) before deploying it anywhere or connecting it to real patient data.
+> **Status: graduation project.** The static audit in [`docs/AUDIT.md`](docs/AUDIT.md) found 22 correctness and security defects; the branch this README describes fixes them one commit each (`git log --grep C-04`). What was learned by running the system is in [`docs/FINDINGS.md`](docs/FINDINGS.md); the before/after numbers are in [`docs/RESULTS.md`](docs/RESULTS.md). It is still not a medical device — see [Safety](#safety-and-medical-disclaimer).
 
 ---
 
 ## What it does
 
-A user sends a message in Egyptian Arabic. It passes through three agents in sequence:
+A user sends a message in Egyptian Arabic. The root agent (`seniocare/pipeline.py`) runs:
 
 1. **Orchestrator** — classifies safety (`EMERGENCY` / `BLOCKED` / `ALLOWED`), classifies intent, and writes a tool-calling plan. No tools.
-2. **Feature** — executes the plan against 10 tools, picks the best option, packages the result.
-3. **Formatter** — renders the package as warm Egyptian Arabic using per-intent templates.
+2. **Routing, in code** — the Orchestrator's output is parsed; `EMERGENCY` and `BLOCKED` skip stage 2 entirely and the relay message is synthesised from the Orchestrator's own text. Unparseable output fails open and is flagged.
+3. **Feature** — executes the plan against 10 tools, picks the best option, packages the result. Runs only for `ALLOWED` requests.
+4. **Formatter** — renders the package as warm Egyptian Arabic using per-intent templates.
 
-A fourth agent, run separately, generates health reports on a schedule or on demand and pushes notifications to caregivers.
-
-### Who it's for
-
-- **Elderly users** — meal and exercise recommendations filtered against their conditions, allergies, and medications; symptom guidance; health questions.
-- **Caregivers** — push notifications when a scheduled report is ready or an emergency is detected in conversation.
+A separate Report agent generates health reports on a schedule or on demand and pushes notifications to caregivers; an emergency detected in conversation triggers one immediately.
 
 ### Capabilities
 
 | Capability | Where |
 |---|---|
-| Safety screening and emergency detection | `seniocare/sub_agents/orchestrator_agent.py:67-116` |
-| Condition- and allergy-aware meal recommendations | `seniocare/tools/nutrition.py:8` |
-| Drug–food interaction checking | `seniocare/tools/interactions.py:7` |
-| Symptom assessment with severity ranking | `seniocare/tools/symptoms.py:8` |
-| Mobility-aware exercise recommendations | `seniocare/tools/exercise.py:8` |
-| Cross-session food and exercise preferences | `seniocare/tools/preferences.py:11` |
+| Safety screening and emergency detection, enforced by control flow | `seniocare/routing.py`, `seniocare/pipeline.py` |
+| Condition- and allergy-aware meal recommendations | `seniocare/tools/nutrition.py` |
+| Drug–food interaction screening (normalised drug names) | `seniocare/tools/interactions.py` |
+| Symptom assessment in Arabic or English, evidence-based escalation | `seniocare/tools/symptoms.py`, `seniocare/tools/_text.py` |
+| Mobility-aware exercise recommendations | `seniocare/tools/exercise.py` |
+| Cross-session food and exercise preferences | `seniocare/tools/preferences.py` |
 | Web, YouTube, and medical search (SerpAPI) | `seniocare/tools/web_search.py` |
-| Storage of medical-report analysis results | `seniocare/tools/image_tools.py:16` |
-| Scheduled + emergency health reports | `seniocare/sub_agents/report_agent.py`, `app/scheduler.py` |
+| Medical-report findings storage | `seniocare/tools/image_tools.py` |
+| Scheduled and emergency health reports from real conversation facts | `seniocare/tools/reports.py`, `app/scheduler.py` |
 | Caregiver push notifications (FCM) | `app/notifications.py` |
+| Per-user authorisation with Firebase ID tokens | `app/auth.py` |
+| Structured JSON logs, per-stage tokens/latency/cost, `llm_traces` table | `seniocare/observability.py`, `GET /metrics/summary` |
+| Evaluation suite: 54 cases / 60 turns, multi-turn, before/after comparison | `evals/` |
 
-**Multimodal note.** Images are handled natively by the model through `/run_sse`; there are no image-upload endpoints. `store_medical_report` persists the model's extracted findings — it does not perform analysis (`seniocare/tools/image_tools.py:1-6`).
+**Multimodal note.** Images are handled natively by the model through `/run_sse`; there are no image-upload endpoints and no image-analysis tool. `store_medical_report` persists what the model read from a report image.
 
 ---
 
@@ -46,49 +45,55 @@ A fourth agent, run separately, generates health reports on a schedule or on dem
 
 ```mermaid
 graph LR
-    U(["User"]) --> API["FastAPI<br/>/run_sse"]
-    API --> CB["before_agent_callback<br/>load profile + history"]
+    U(["User"]) --> API["FastAPI · auth middleware<br/>/run_sse"]
+    API --> CB["populate_user_data<br/>profile + history"]
     CB --> O["1 · Orchestrator<br/>safety + intent + plan"]
-    O --> F["2 · Feature<br/>tools + decision"]
-    F --> M["3 · Formatter<br/>Egyptian Arabic"]
+    O --> R{"route()<br/>seniocare/routing.py"}
+    R -->|ALLOWED| F["2 · Feature<br/>tools + decision"]
+    R -->|BLOCKED / EMERGENCY| M["3 · Formatter<br/>Egyptian Arabic"]
+    F --> M
     M --> U
-    F --> T["Tools"]
+    F --> T["10 tools · thread pool"]
     T --> DB[("PostgreSQL")]
     T --> S[("SerpAPI")]
-    M --> AC["after_agent_callback"]
-    AC -->|"intent == emergency"| R["Report agent"]
-    R --> FCM["FCM → caregivers"]
+    M --> AC["auto_save_to_memory"]
+    AC -->|"EMERGENCY (status or intent)"| RP["Report agent"]
+    RP --> FCM["FCM → caregivers"]
+    O -. llm_call / stage records .-> OBS[("observability<br/>JSON logs + llm_traces")]
+    F -. tool_call records .-> OBS
 ```
 
-All three stages run on **every** request. There is no conditional bypass — blocked and emergency messages still traverse all three. Full call graph and state model: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Full call graph, state model and data model: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ### Agents
 
 | Agent | Role |
 |---|---|
 | Orchestrator | Safety, intent, planning |
-| Feature | Tool execution and selection |
+| Feature | Tool execution and selection (ALLOWED only) |
 | Formatter | Egyptian Arabic rendering |
 | Report | Health report generation |
 
-All four use the same model, built once by `get_model()` in `seniocare/model.py` from the `MODEL_*` environment variables (default `ollama_chat/gemma4:e4b` on a local Ollama). See [Model configuration](#model-configuration).
+All four use the same model, built once by `get_model()` in `seniocare/model.py` from the `MODEL_*` environment variables. Every agent carries the observability callbacks (`stage_callbacks()`), so each model and tool call is recorded.
 
 ### Tools
 
-The ten tools registered on the Feature Agent (`seniocare/sub_agents/feature_agent.py:312-323`):
+The ten tools registered on the Feature Agent (`seniocare/sub_agents/feature_agent.py`). They are synchronous functions wrapped by `threaded()` so they run in a thread pool instead of blocking the event loop.
 
 | Tool | Does |
 |---|---|
-| `get_meal_options` | Meals filtered by condition nutrient limits and allergens |
+| `get_meal_options` | Meals filtered by condition nutrient limits and allergens; meals with unknown nutrients are excluded and reported |
 | `get_meal_recipe` | Full recipe for a selected meal |
-| `check_drug_food_interaction` | Screens foods against the user's medications |
-| `assess_symptoms` | Matches symptoms to diseases with severity and precautions |
+| `check_drug_food_interaction` | Screens foods against the user's medications, one query |
+| `assess_symptoms` | Matches symptoms (Arabic or English) to diseases; `is_emergency` needs two matched symptoms or ≥50 % confidence, weaker emergency hits are listed as `possible_emergency` |
 | `get_exercises` | Exercises for the user's mobility level, minus contraindications |
-| `save_user_preference` | Persists likes/dislikes to cross-session state |
+| `save_user_preference` | Persists likes/dislikes to cross-session state; a dislike removes the matching like |
 | `search_web` | General web search with content extraction |
 | `search_youtube` | Video tutorials |
 | `search_medical_info` | Search restricted to trusted medical domains |
 | `store_medical_report` | Stores medical-report findings to the database |
+
+Each tool has a per-turn re-entrancy guard (`seniocare/tools/_guards.py`): a second call in the same turn returns `already_called`; the next turn runs it again.
 
 ---
 
@@ -104,7 +109,15 @@ The backend consumes the model like an external API. Tools, prompts, sessions an
 | Google AI Studio | `gemini/gemini-2.5-flash` | *(blank)* | your key |
 | Groq, OpenRouter, any OpenAI-compatible | `openai/<model>` | provider URL | provider key |
 
-Optional: `MODEL_TIMEOUT_S` (default 120), `MODEL_TEMPERATURE`, `MODEL_MAX_TOKENS`, `MODEL_EXTRA_JSON` for any other `litellm.completion` kwarg. The Colab notebook in `colab/` serves the model and prints these three lines to paste; `python scripts/check_model.py` verifies connectivity and tool calling before you start the app.
+Optional: `MODEL_TIMEOUT_S` (default 120), `MODEL_TEMPERATURE`, `MODEL_MAX_TOKENS`, `MODEL_EXTRA_JSON` for any other `litellm.completion` kwarg.
+
+**Colab.** `colab/SenioCare_Model_Server.ipynb` (generated from `colab/build_notebook.py`) installs Ollama or vLLM on the Colab GPU, exposes an OpenAI-compatible endpoint through a cloudflared or ngrok tunnel, runs a tool-calling gate, and prints the three `.env` lines to paste. Then, from the backend:
+
+```bash
+python scripts/check_model.py --adk
+```
+
+runs reachability, a completion, a tool call, a tool-result round trip and ADK's own tool loop against the configured endpoint. Run it after every Colab restart; the tunnel URL changes.
 
 ---
 
@@ -112,15 +125,11 @@ Optional: `MODEL_TIMEOUT_S` (default 120), `MODEL_TEMPERATURE`, `MODEL_MAX_TOKEN
 
 ### Prerequisites
 
-- **Python 3.10+**
-- **A model server.** By default [Ollama](https://ollama.com/) on this machine with the model pulled:
-  ```bash
-  ollama pull gemma4:e4b
-  ```
-  Or point `MODEL_API_BASE` at a remote server — see [Model configuration](#model-configuration).
-- **PostgreSQL** — two databases (or two schemas): one for tools data, one for ADK sessions. [Neon](https://neon.tech/) works.
+- **Python 3.12** (CI runs 3.12; 3.10+ should work)
+- **A model server.** By default [Ollama](https://ollama.com/) on this machine with the model pulled (`ollama pull gemma4:e4b`), or a remote endpoint per [Model configuration](#model-configuration). The model must support tool calling; `scripts/check_model.py` tells you.
+- **PostgreSQL** — two databases (or two schemas): one for tools data, one for ADK sessions. [Neon](https://neon.tech/) works. Connections are pooled with connect and query deadlines.
 - *Optional:* **SerpAPI key** — without it the three search tools return a structured error and the rest of the pipeline continues.
-- *Optional:* **Firebase service-account JSON** — without it push notifications are skipped with a warning (`app/notifications.py:74-79`).
+- *Optional:* **Firebase service-account JSON** — needed for push notifications and for `AUTH_MODE=firebase`.
 
 ### Install
 
@@ -138,14 +147,20 @@ cp .env.example .env
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `APP_DATABASE_URL` | **Yes** | Tools database. Read at `seniocare/data/database.py:40` |
-| `SESSION_DB_URL` | **Yes** | ADK session store. Read at `app/config.py:43`. Falls back to local SQLite if unset |
-| `SERPAPI_KEY` | No | Web/YouTube/medical search. `seniocare/tools/web_search.py:34` |
-| `FIREBASE_CREDENTIALS_PATH` | No | FCM service account. `app/config.py:29` |
-| `PORT` | No | Server port, default 8080. `main.py:114` |
+| `APP_DATABASE_URL` | **Yes** | Tools database |
+| `SESSION_DB_URL` | **Yes** | ADK session store (falls back to local SQLite if unset) |
+| `MODEL_NAME`, `MODEL_API_BASE`, `MODEL_API_KEY` | No | Model; defaults to local Ollama |
+| `AUTH_MODE` | No | `firebase` or `off`. Unset: `firebase` when the Firebase file exists, else `off` (announced at startup) |
+| `ADMIN_UIDS` | No | Firebase uids allowed on `/metrics`, `/dev-ui`, `/debug`, eval sets |
+| `SERPAPI_KEY` | No | Web/YouTube/medical search |
+| `FIREBASE_CREDENTIALS_PATH` | No | FCM service account and token verification |
+| `OBS_DB_ENABLED`, `COST_REFERENCE_MODEL`, `MODEL_GPU_USD_PER_HOUR`, `SERPAPI_USD_PER_SEARCH` | No | Observability and cost views |
+| `JUDGE_MODEL`, `JUDGE_API_KEY`, `JUDGE_API_BASE` | No | LLM judge for the eval suite |
+| `DEV_TEST_USER` | No | `1` injects the built-in test profile for requests without a profile (dev only) |
+| `PORT` | No | Server port, default 8080 |
 | `TEST_DATABASE_URL` | No | Test database. **Fixtures DROP all tables — never point this at anything you care about** |
 
-`SESSION_DB_URL` is rewritten at `app/config.py:45-59` to add the `+asyncpg` prefix and strip `sslmode` / `channel_binding`, which asyncpg rejects as URL parameters. Supply a normal `postgresql://` URL.
+`SESSION_DB_URL` is rewritten to add the `+asyncpg` prefix and strip `sslmode` / `channel_binding`, which asyncpg rejects. Supply a normal `postgresql://` URL.
 
 ### Run
 
@@ -153,17 +168,13 @@ cp .env.example .env
 python main.py
 ```
 
-Serves on `http://localhost:8080`. Swagger UI at `/docs`. Tables are created and seeded on first import (`seniocare/agent.py:27-30`).
-
-```bash
-python main.py --port 3000
-```
-
-The ADK development web UI is enabled (`SERVE_WEB_INTERFACE = True`, `app/config.py:85`).
+Serves on `http://localhost:8080`. Swagger UI at `/docs`. Tables are created and seeded on first import. The startup banner shows the resolved model, endpoint and auth mode; `GET /health` shows the same plus live checks.
 
 ---
 
 ## API
+
+All routes except `/health`, `/docs`, `/openapi.json`, `/redoc` and `/list-apps` require `Authorization: Bearer <Firebase ID token>` when `AUTH_MODE=firebase`. A request may act on `user_id` U when the token's uid is U or is listed in U's `user:caregiver_ids`.
 
 ### Chat
 
@@ -179,72 +190,68 @@ The ADK development web UI is enabled (`SERVE_WEB_INTERFACE = True`, `app/config
 }
 ```
 
-Responses stream as SSE events. Render events whose `author` is `formatter_agent` — that is the only user-facing stage.
-
-> `/run_sse` does **not** appear in `/docs`; the custom OpenAPI generator omits it (`app/openapi.py:13-23`).
+Responses stream as SSE events. Render events whose `author` is `formatter_agent` — that is the only user-facing stage. Every response carries an `X-Trace-Id` header that matches the JSON log records for that request.
 
 ### Custom endpoints
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/health` | Config plus live checks: DB `SELECT 1`, model-server reachability. `?probe=full` also sends a one-token completion |
+| `GET` | `/health` | Config plus live checks: DB `SELECT 1`, model-server reachability, auth mode. `?probe=full` also sends a one-token completion |
+| `GET` | `/metrics/summary?hours=24` | p50/p95 latency and tokens per stage, cost per turn, intent and safety distribution, tool latency and guard hits, SerpAPI spend, emergency escalation outcomes (admin) |
 | `POST` | `/create-session` | Create a session, returns `session_id` |
 | `GET` | `/chat-history/{user_id}` | List conversations with headlines |
 | `GET` | `/chat-history/{user_id}/{session_id}` | Full turns for one conversation |
-| `POST` | `/set-user-profile/{user_id}` | Create/replace the health profile |
+| `POST` | `/set-user-profile/{user_id}` | Create/replace the health profile (`caregiver_ids` is the caregiver allow-list) |
 | `GET` | `/get-user-profile/{user_id}` | Read the health profile |
 | `POST` | `/sync-user-profile/{user_id}` | Partial profile update |
-| `POST` | `/register-caregiver-fcm` | Register a caregiver device token |
-| `POST` | `/reports/generate` | Generate a report (`daily`/`weekly`/`monthly`/`emergency`) |
+| `POST` | `/register-caregiver-fcm` | Register a caregiver device token (caller must be that caregiver) |
+| `POST` | `/reports/generate` | Generate a report (`daily`/`weekly`/`monthly`/`emergency`) for a period |
 | `GET` | `/reports/{user_id}` | List a user's reports |
 | `GET` | `/reports/{user_id}/{report_id}` | One report in full |
-| `GET` | `/reports/medical/{user_id}` | Stored medical-report analyses — **currently returns 404 for all input** ([C-16](docs/AUDIT.md)) |
-| `POST` | `/reports/seed` | Insert sample data. Development only — unauthenticated, and `clear=true` deletes data |
+| `GET` | `/reports/medical/{user_id}` | Stored medical-report analyses |
+| `POST` | `/reports/seed` | Insert sample data. Exists only when `AUTH_MODE=off` |
 
-**No endpoint requires authentication.** `user_id` is an unauthenticated parameter throughout.
+---
+
+## Observability
+
+`seniocare/observability.py` emits one JSON record per LLM call, tool call, stage, turn, metered search, emergency escalation and HTTP request, to stdout and (when a database is configured) to the `llm_traces` table. Each turn record carries end-to-end latency, tokens, three cost views (list price at a reference hosted model, GPU-hour × wall time, SerpAPI), the parsed intent and safety status with parse flags, the stages that ran, tool guard hits and errors.
+
+```bash
+python scripts/metrics_report.py --hours 24            # Markdown tables
+python scripts/metrics_report.py --csv-dir out/metrics # plus CSVs
+```
+
+ADK already creates OpenTelemetry spans for every model and tool call; set `OTEL_EXPORTER_OTLP_ENDPOINT` to ship them to any OTLP collector. Design and rationale: [`docs/INSTRUMENTATION.md`](docs/INSTRUMENTATION.md).
 
 ---
 
 ## Testing
 
 ```bash
-# Unit and tool tests. Requires a disposable PostgreSQL database —
-# the session fixture calls reset_database(), which DROPs every table.
+# Pure tests (routing, guards, text matching, auth, observability, eval assertions): no DB needed
+python -m pytest tests -q
+
+# Tool tests need a database. Either a disposable one (fixtures DROP every table)…
 export TEST_DATABASE_URL='postgresql://user:pass@host/seniocare_test?sslmode=require'
-python -m pytest tests/unit tests/test_database_tools.py -v
+# …or, locally, the configured APP_DATABASE_URL (read-only queries, slower)
+python -m pytest tests -q
 ```
 
-```bash
-# Integration tests. Skipped automatically unless a server is on :8080.
-python main.py &
-python -m pytest tests/integration/ -v
-```
-
-**Current state, measured:**
-
-```
-76 passed, 48 skipped in 107.89s
-```
-
-Three caveats worth knowing before you trust a green run:
-
-- **The full suite does not collect.** `tests/integration/test_multi_tool_flows.py` imports `seniocare.tools.medication`, which no longer exists. Use `--ignore` on that file, or fix the import.
-- **All 48 integration tests skip** when no server is running (`tests/integration/test_api_endpoints.py:37-40`). A green run may mean nothing was exercised.
-- **`pytest.ini` sets `asyncio_mode` and `timeout`, but neither plugin is installed**, so both options are silently ignored and async tests do not run as intended.
-
-Unit tests reach the live database, which is why the suite takes ~108 seconds.
+Without any database the DB-backed tests skip with an explicit reason. CI (`.github/workflows/ci.yml`) runs the whole suite against a PostgreSQL service on every push.
 
 ### Agent evaluation
 
-Scaffolding lives in [`evals/`](evals/) — 48 cases in Egyptian Arabic across every route the code can take.
+[`evals/`](evals/) holds 54 cases (60 turns) in Egyptian Arabic across every route the code can take, including six multi-turn scenarios that probe the defects only visible across turns.
 
 ```bash
-python evals/runner.py --dry-run          # validate cases
-python evals/runner.py                    # run in-process
-python evals/runner.py --filter emergency-
+python evals/runner.py --dry-run                 # validate cases
+python evals/runner.py --name my-run             # run in-process, results in evals/results/my-run/
+python evals/runner.py --filter emergency- --judge-human
+python evals/compare.py baseline-colab fixed-colab
 ```
 
-**Assertion logic is deliberately stubbed.** The harness records outputs, tool calls, and latencies, and asserts nothing. See [`evals/schema.md`](evals/schema.md), including the categories that cannot be automated and need human review.
+Each run writes `results.jsonl`, `summary.md`/`summary.json` (routing accuracy, safety confusion matrix, tool precision/recall, guard-hit rate, silent-failure counts, latency/tokens/cost) and `human_review.csv` for the cases a person must judge. Schema, assertion tiers and the categories that cannot be automated: [`evals/schema.md`](evals/schema.md). Protocol and threats to validity: [`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md).
 
 ---
 
@@ -252,70 +259,63 @@ python evals/runner.py --filter emergency-
 
 For **informational and support purposes only**.
 
-- It does **not** diagnose. Diagnosis requests are refused (`orchestrator_agent.py:96`).
-- It does **not** prescribe or adjust dosages (`orchestrator_agent.py:97-99`).
-- It screens for emergency language and directs users to emergency services (`orchestrator_agent.py:76-85`).
+- It does **not** diagnose. Diagnosis requests are refused by the Orchestrator and the refusal path skips the tools.
+- It does **not** prescribe or adjust dosages.
+- It screens for emergency language, directs users to emergency services (123), and notifies registered caregivers.
 - It advises consulting a qualified provider.
 
-**The safety mechanisms have documented defects.** Emergency escalation depends on a single regex matching one exact token, and symptom matching produces both false emergencies and — plausibly — missed ones for Arabic input. Do not rely on this system for real medical safety. See [`docs/AUDIT.md`](docs/AUDIT.md), findings C-02, C-03, C-12, C-13.
+The safety path now runs in code rather than prose, and its behaviour is measured (`docs/RESULTS.md`), but the model can still misclassify, the symptom database is small (15 conditions), and the human-review tier of the evaluation has not been completed. Do not rely on this system for real medical safety.
 
 ---
 
 ## Known limitations
 
-Honest summary. Full detail in [`docs/AUDIT.md`](docs/AUDIT.md).
-
-**Security**
-- No authentication on any endpoint; `user_id` is caller-supplied. Any user's medical profile and conversations can be read or overwritten.
-- CORS is `"*"`.
-- No rate limiting, no audit log, no data-deletion path.
-
-**Correctness**
-- Emergency routing is enforced by prompt text, not control flow.
-- `SAFETY_STATUS` is never read by any code; only `INTENT` is parsed.
-- Tool re-entrancy guards persist for the whole session, so from the second turn onward guarded tools — including drug-interaction screening — silently return nothing.
-- A fabricated patient profile is injected whenever a real one is missing.
-- Preference conflict-resolution silently no-ops for dislikes.
-- Report date ranges are ignored for conversation data; four aggregation fields are always empty.
-- `GET /reports/medical/{user_id}` is shadowed by an earlier route and always 404s.
-
-**Operations**
-- No Docker, no CI, no migrations, no linter, no type checker.
-- No tracing, metrics, or token/cost accounting; the two configured loggers emit nothing.
-- Synchronous database and HTTP calls block the async event loop.
-- Database connections are pooled with connect/query deadlines (`seniocare/data/database.py`); LLM calls have a per-request timeout (`MODEL_TIMEOUT_S`) but no retry.
-- Dependencies are unpinned (`>=` only), with no lock file.
-
-**Configuration**
-- The Orchestrator prompt documents two tools that do not exist and two models that are not configured.
+- **Single-process assumptions.** The caregiver-registration lock and the auth caregiver cache are per process; a multi-worker deployment needs a shared lock/cache.
+- **No token revocation check, no rate limiting, no audit log, no data-deletion path.** CORS still allows `*`.
+- **Prompt size.** Each turn sends ~10,000 prompt tokens across three stages (`docs/FINDINGS.md` F-03); no prompt caching or compression yet.
+- **Symptom coverage.** 15 conditions, 81 symptom phrases, one synonym table; not a clinical knowledge base.
+- **Human-review tier pending.** Emergency adequacy, clinical appropriateness and dialect are triaged, not verified.
+- **No migrations, no Docker, no lock file.** Schema is `CREATE TABLE IF NOT EXISTS` at import.
 
 ---
 
 ## Project layout
 
 ```
-main.py                     FastAPI entry point
+main.py                     FastAPI entry point: lifespan, auth + trace middleware, routers
 app/
-  config.py                 Env parsing, shared DatabaseSessionService
-  openapi.py                Custom OpenAPI schema
+  auth.py                   Firebase ID-token auth, per-user authorisation (ASGI middleware)
+  config.py                 Env parsing, model info, shared DatabaseSessionService
+  metrics_queries.py        SQL aggregations over llm_traces
   notifications.py          FCM push notifications
+  openapi.py                Custom OpenAPI schema
   scheduler.py              APScheduler report jobs
-  routers/                  health, sessions, chat_history, user_profile, reports
+  routers/                  health, metrics, sessions, chat_history, user_profile, reports
   schemas/                  Pydantic request models
 seniocare/
-  agent.py                  Root SequentialAgent
-  callbacks.py              before/after agent callbacks
+  agent.py                  Root agent (SenioCarePipeline) + root callbacks
+  pipeline.py               Orchestrator -> route() -> Feature -> Formatter
+  routing.py                Pure routing decision from the Orchestrator's output
+  callbacks.py              Profile/history loading, emergency trigger, turn record
+  model.py                  Provider-agnostic model factory (MODEL_* env)
+  observability.py          emit(), ADK callbacks, cost views, Postgres sink
   sub_agents/               orchestrator, feature, formatter, report
-  tools/                    10 agent tools
+  tools/                    10 agent tools + _guards, _text, _async helpers
   data/
-    database.py             Schema, seeding, connections
-    seeds/*.json            Seed data
-tests/                      unit + integration
-evals/                      Evaluation scaffolding (assertions stubbed)
+    database.py             Schema, seeding, pooled connections with deadlines
+    seeds/*.json            Seed data incl. symptom_synonyms_ar.json
+colab/                      Model-server notebook + its generator
+scripts/                    check_model.py, metrics_report.py
+evals/                      Cases, runner, compare, rubrics, results
+tests/                      Pure tests + DB-backed tool tests
 docs/
-  AUDIT.md                  Findings, severities, citations
-  ARCHITECTURE.md           Call graph, state flow, limitations
-  INSTRUMENTATION.md        Measurement plan
+  AUDIT.md                  Static audit: findings, severities, citations
+  FINDINGS.md               What running the system revealed (F-01…)
+  PLAN.md                   Phased plan and status
+  ARCHITECTURE.md           Call graph, state flow, data model
+  INSTRUMENTATION.md        Measurement design
+  EXPERIMENTS.md            Eval protocol and threats to validity
+  RESULTS.md                Baseline vs post-fix numbers
 ```
 
 ---

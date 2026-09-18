@@ -1,101 +1,102 @@
 # SenioCare — Architecture
 
-**Scope:** what the code does today, traceable to `file:line`. Planned work is not described here. Known defects are linked to `docs/AUDIT.md` rather than restated.
+**Scope:** what the code does on branch `feat/hardening`. The pre-hardening state is preserved in `docs/AUDIT.md` (findings are referenced here by id). Nothing planned-but-unbuilt is described.
 
-**Version:** `APP_VERSION = "3.1.0"` (`app/config.py:22`) · ADK 1.22.0
+**Version:** `APP_VERSION = "3.1.0"` (`app/config.py`) · ADK 1.22.0
 
 ---
 
 ## 1. System overview
 
-SenioCare is a FastAPI service wrapping a three-stage Google ADK agent pipeline. A user message enters over `/run_sse`, passes through three sequential LLM stages, and returns an Egyptian Arabic response. A separate, standalone fourth agent generates health reports on a schedule or on demand.
+SenioCare is a FastAPI service wrapping a three-stage Google ADK agent pipeline with a routing decision made in code between stages 1 and 2. A user message enters over `/run_sse`, is authorised, passes through the Orchestrator, is routed, optionally passes through the Feature Agent, and returns an Egyptian Arabic response from the Formatter. A separate Report agent generates health reports on a schedule, on demand, or on an emergency.
 
 ```mermaid
 graph TB
     subgraph client [Client]
-        Flutter[Flutter app]
+        Flutter[Flutter app · Firebase sign-in]
     end
 
     subgraph api [FastAPI · main.py]
-        SSE["POST /run_sse<br/>(provided by ADK)"]
-        Custom["Custom routers<br/>app/routers/*"]
+        Auth["AuthMiddleware · app/auth.py<br/>Bearer Firebase ID token → uid<br/>uid == user_id or uid ∈ caregiver_ids"]
+        Trace["trace middleware<br/>X-Trace-Id · http_request record"]
+        SSE["POST /run_sse (ADK)"]
+        Custom["Custom routers · app/routers/*"]
     end
 
-    subgraph pipeline [Chat pipeline · SequentialAgent · seniocare/agent.py:35]
-        Before["before_agent_callback<br/>populate_user_data<br/>callbacks.py:73"]
-        Orch["1 · orchestrator_agent<br/>safety + intent + plan<br/>output_key: orchestrator_result"]
-        Feat["2 · feature_agent<br/>tool calls + decision<br/>output_key: feature_result"]
-        Fmt["3 · formatter_agent<br/>Egyptian Arabic<br/>output_key: final_response"]
-        After["after_agent_callback<br/>auto_save_to_memory<br/>callbacks.py:149"]
+    subgraph pipeline [Chat pipeline · SenioCarePipeline · seniocare/pipeline.py]
+        Before["populate_user_data<br/>callbacks.py"]
+        Orch["1 · orchestrator_agent<br/>→ orchestrator_result"]
+        Route{"route()<br/>seniocare/routing.py<br/>→ safety_status, intent, route, parse_ok"}
+        Feat["2 · feature_agent<br/>→ feature_result"]
+        Fmt["3 · formatter_agent<br/>→ final_response"]
+        After["auto_save_to_memory<br/>headline · emergency trigger · turn record"]
     end
 
-    subgraph tools [Tools · seniocare/tools/]
+    subgraph tools [Tools · seniocare/tools/ · threaded()]
         DBTools["get_meal_options · get_meal_recipe<br/>check_drug_food_interaction<br/>assess_symptoms · get_exercises<br/>store_medical_report"]
         StateTools["save_user_preference"]
         WebTools["search_web · search_youtube<br/>search_medical_info"]
     end
 
-    subgraph reports [Report pipeline · standalone]
-        Sched["APScheduler<br/>app/scheduler.py"]
-        RptAgent["report_agent<br/>output_key: report_result"]
-        FCM["Firebase Cloud Messaging<br/>app/notifications.py"]
+    subgraph reports [Report pipeline]
+        Sched["APScheduler · app/scheduler.py"]
+        RptAgent["report_agent → report_result"]
+        FCM["Firebase Cloud Messaging"]
+    end
+
+    subgraph obs [Observability · seniocare/observability.py]
+        Emit["emit() → JSON log line<br/>+ llm_traces (Postgres sink)"]
     end
 
     subgraph data [Persistence]
-        SessDB[("Session DB<br/>Postgres · asyncpg<br/>ADK DatabaseSessionService")]
-        ToolDB[("Tools DB<br/>Postgres · psycopg2<br/>8 tables")]
+        SessDB[("Session DB · Postgres · asyncpg<br/>ADK DatabaseSessionService")]
+        ToolDB[("Tools DB · Postgres · psycopg2 pool<br/>9 tables + llm_traces")]
     end
 
-    Flutter --> SSE
-    Flutter --> Custom
-    SSE --> Before --> Orch --> Feat --> Fmt --> After
-    Feat --> DBTools
-    Feat --> StateTools
-    Feat --> WebTools
+    Flutter --> Auth --> Trace --> SSE
+    Trace --> Custom
+    SSE --> Before --> Orch --> Route
+    Route -->|ALLOWED / unparseable| Feat --> Fmt
+    Route -->|BLOCKED / EMERGENCY<br/>synthesised feature_result| Fmt
+    Fmt --> After
+    Feat --> DBTools & StateTools & WebTools
     DBTools --> ToolDB
     Before -.reads.-> SessDB
     After -.writes.-> SessDB
-    StateTools -.writes.-> SessDB
-    After -->|"intent == emergency"| RptAgent
+    After -->|"EMERGENCY (status or intent)<br/>tracked background task"| RptAgent
     Sched --> RptAgent
     Custom --> RptAgent
     RptAgent --> ToolDB
     RptAgent --> FCM
     WebTools --> SerpAPI[(SerpAPI)]
+    Orch & Feat & Fmt & RptAgent -. model/tool/stage callbacks .-> Emit
+    After -. turn record .-> Emit
+    Emit --> ToolDB
 ```
 
-**Note on this diagram versus the previous one.** The earlier README diagram drew an edge from the Orchestrator directly to the Formatter, labelled `BLOCKED / EMERGENCY`. That edge does not exist. `SequentialAgent` (`seniocare/agent.py:35-43`) runs all three sub-agents unconditionally. The diagram above reflects the real, unconditional path. See `docs/AUDIT.md` **C-02**.
+Compared with the audited version: the bypass edge now exists (it is a Python `if`, not a prompt instruction); every route is behind auth; tools run in a thread pool; every stage is measured.
 
 ---
 
 ## 2. Call graph — one chat request
 
-| # | Hop | File:line |
+| # | Hop | Where |
 |---|---|---|
-| 1 | `POST /run_sse` — route provided by ADK's `get_fast_api_app` | `main.py:38-44` |
-| 2 | Import of the `seniocare` package creates and seeds all tables | `seniocare/agent.py:27-30` → `seniocare/data/database.py:83` |
-| 3 | ADK loads the session from Postgres | `app/config.py:90` |
-| 4 | `before_agent_callback` → `populate_user_data` | `seniocare/callbacks.py:73` |
-| 4a | Inject fabricated test profile if `user:user_id` is absent | `seniocare/callbacks.py:86-94` — see **C-11** |
-| 4b | Increment turn counter | `seniocare/callbacks.py:108-109` |
-| 4c | Build `conversation_history` from the last 12 events | `seniocare/callbacks.py:114-120` |
-| 5 | **Stage 1 — Orchestrator.** Prompt interpolates `{conversation_history}` and `{user:preferences}` | `seniocare/sub_agents/orchestrator_agent.py:313`; templates at `:39`, `:42` |
-| 6 | Writes `orchestrator_result` | `orchestrator_agent.py:318` |
-| 7 | **Stage 2 — Feature.** Prompt interpolates `{orchestrator_result}` | `feature_agent.py:307`; template at `:63` |
-| 8 | ADK dispatches tool calls against the 10 registered tools | `feature_agent.py:312-323` |
-| 8a | Each DB tool opens its own connection and closes it | `seniocare/data/database.py:71` |
-| 9 | Writes `feature_result` | `feature_agent.py:324` |
-| 10 | **Stage 3 — Formatter.** Prompt interpolates `{feature_result}` | `formatter_agent.py:229`; template at `:50` |
-| 11 | Writes `final_response` | `formatter_agent.py:234` |
-| 12 | `after_agent_callback` → `auto_save_to_memory` | `seniocare/callbacks.py:149` |
-| 12a | Generate session headline (turn 1 only) | `seniocare/callbacks.py:157-181` |
-| 12b | If `INTENT: emergency`, spawn background report + FCM task | `seniocare/callbacks.py:183-185` → `:213-248` |
-| 12c | Memory save attempt — always fails, memory is disabled | `seniocare/callbacks.py:187-194`; `app/config.py:63` |
-| 13 | SSE events stream to the client | — |
+| 1 | `POST /run_sse` — route provided by ADK's `get_fast_api_app` | `main.py` |
+| 1a | Auth middleware verifies the bearer token, reads `user_id` from the body, checks uid/caregiver allow-list; 401/403 otherwise | `app/auth.py:AuthMiddleware` |
+| 1b | Trace middleware assigns `X-Trace-Id`, times the request | `main.py:trace_requests` |
+| 2 | ADK loads the session from Postgres | `app/config.py` |
+| 3 | `before_agent_callback` → `populate_user_data`: starts the turn record; injects the test profile only with `DEV_TEST_USER=1`, otherwise sets `profile_missing`; increments `conversation_turn_count`; builds `conversation_history` | `seniocare/callbacks.py` |
+| 4 | **Stage 1 — Orchestrator.** Prompt interpolates `{conversation_history}` and `{user:preferences}`; writes `orchestrator_result` | `seniocare/sub_agents/orchestrator_agent.py` |
+| 5 | **Routing.** `route(orchestrator_result)` parses `SAFETY_STATUS` and `INTENT` tolerantly; writes `safety_status`, `intent`, `route`, `orchestrator_parse_ok`; on BLOCKED/EMERGENCY also writes a synthesised `feature_result` (`RESPONSE_TYPE: emergency` + the Orchestrator's `EMERGENCY_MESSAGE`, or the blocked equivalent) | `seniocare/routing.py`, `seniocare/pipeline.py` |
+| 6 | **Stage 2 — Feature** (ALLOWED or unparseable only). Prompt interpolates `{orchestrator_result}`; ADK dispatches tool calls; each tool runs in a thread via `threaded()`; per-turn guards stop duplicates; writes `feature_result` | `feature_agent.py`, `tools/_async.py`, `tools/_guards.py` |
+| 7 | **Stage 3 — Formatter.** Prompt interpolates `{feature_result}`; writes `final_response` | `formatter_agent.py` |
+| 8 | `after_agent_callback` → `auto_save_to_memory`: headline on turn 1; if `safety_status == EMERGENCY` or `intent == emergency`, spawn the report + FCM task (kept in `_BACKGROUND_TASKS` with a done-callback); emit the `turn` record | `seniocare/callbacks.py` |
+| 9 | SSE events stream to the client | — |
 
-The client renders only events whose author is `formatter_agent`. That contract is visible in the chat-history reader at `app/routers/chat_history.py:82`.
+Each `LlmAgent` also runs the observability callbacks: `before/after_model` (latency, tokens, cost, finish reason, requested tools), `before/after_tool` (latency, status, `already_called`), `before/after_agent` (stage latency, output size, parse success).
 
-**Three LLM round-trips per turn.** Every request pays all three regardless of complexity; a bare preference statement costs the same as a full meal plan.
+**LLM round-trips per turn:** three on the ALLOWED path, two on the BLOCKED/EMERGENCY path.
 
 ---
 
@@ -103,56 +104,30 @@ The client renders only events whose author is `formatter_agent`. That contract 
 
 ### Stage 1 — Orchestrator (`seniocare/sub_agents/orchestrator_agent.py`)
 
-Reasoning only; no tools bound.
+Reasoning only; no tools bound. Emits labelled text: `SAFETY_STATUS`, `INTENT`, `USER_CONTEXT`, `TASK_PLAN`, and for the safety paths `BLOCKED_REASON` / `BLOCKED_MESSAGE` / `EMERGENCY_MESSAGE`. Both `SAFETY_STATUS` and `INTENT` are read by `route()` with a parser tolerant of markdown bold, case and full-width colons (C-03). The tool catalogue in the prompt matches the ten real tools (C-06).
 
-| Responsibility | Prompt location |
-|---|---|
-| Safety screen → `EMERGENCY` / `BLOCKED` / `ALLOWED` | `:67-116` |
-| Intent classification into 11 categories | `:118-161` |
-| Task planning naming tools and parameters | `:163-277` |
-| Structured output block | `:279-306` |
+### Routing (`seniocare/routing.py`)
 
-Emits labelled free text (`SAFETY_STATUS:`, `INTENT:`, `USER_CONTEXT:`, `TASK_PLAN:`). **Only `INTENT` is ever read by Python**, via one regex at `seniocare/callbacks.py:208`. `SAFETY_STATUS` has no consumer in the codebase — see **C-03**.
+Pure function. Decision table:
 
-The prompt documents two tools that do not exist (`:225`, `:232`) — see **C-06**.
+| Orchestrator says | Feature runs | `feature_result` |
+|---|---|---|
+| `EMERGENCY` by status **or** intent | no | synthesised emergency relay, default message includes 123 |
+| `BLOCKED` by status **or** intent | no | synthesised blocked relay |
+| `ALLOWED` | yes | written by the Feature Agent |
+| unparseable | yes (fail open) | written by the Feature Agent; `orchestrator_parse_ok=false` |
 
 ### Stage 2 — Feature (`seniocare/sub_agents/feature_agent.py`)
 
-Executes the plan, selects among options, packages results.
-
-Ten tools bound at `:312-323`. Per-intent workflows at `:155-225`. Output contract at `:228-273`.
-
-Its output is **never parsed** — it is passed verbatim as a string into stage 3's prompt.
+Executes the plan with the ten tools, selects, packages `RESPONSE_TYPE` + data + `PRESENTATION_PLAN`. Response types cover every intent (meal, exercise, symptom, medical Q&A, emotional support, routine, preference, both image intents).
 
 ### Stage 3 — Formatter (`seniocare/sub_agents/formatter_agent.py`)
 
-The only stage whose output the user sees (`:26`).
-
-Templates exist for five response types:
-
-| Response type | Template |
-|---|---|
-| `meal_recommendation` | `:99-125` |
-| `exercise_plan` | `:127-145` |
-| `preference_saved` | `:147-155` |
-| `symptom_alert` | `:157-172` |
-| `medical_qa` | `:174-183` |
-| `emergency` | `:68-79` |
-| `blocked` | `:81-91` |
-
-**No template exists for `emotional_support` or `routine`**, both of which are valid upstream intents (`orchestrator_agent.py:134`, `:136`) and one of which is a declared response type (`feature_agent.py:233`). Those paths reach the Formatter with no template to follow.
+Renders Egyptian Arabic from templates; one template per response type, including the emergency and blocked relays.
 
 ### Report agent (`seniocare/sub_agents/report_agent.py`)
 
-Standalone; not part of the chat pipeline (`:8`). Invoked through a manually constructed `Runner` with a fresh `InMemorySessionService` per call (`seniocare/tools/reports.py:433-438`).
-
-Four triggers:
-1. `POST /reports/generate` — `app/routers/reports.py:22`
-2. APScheduler daily 23:00 / weekly Sun 23:00 / monthly 1st 23:00 — `app/scheduler.py:184-208`
-3. Emergency detected in chat — `seniocare/callbacks.py:184`
-4. Direct call to `generate_report` — `seniocare/tools/reports.py:336`
-
-Emits markdown prefixed by a `STATUS:` line, parsed at `reports.py:503`.
+Invoked by `seniocare/tools/reports.py::generate_report` with an aggregate built from: the profile (session state), conversation facts extracted from the session events **inside the report period** (symptoms reported and assessed, meals and exercises returned by tools, harmful interactions, emergency turns), stored medical-report analyses, and a `data_coverage` block naming the fields with no data. Only the agent's final response is kept; an unparseable `STATUS` is stored as `unknown` and recorded.
 
 ---
 
@@ -168,21 +143,9 @@ All four agents call `get_model()` in `seniocare/model.py`, which builds one `Li
 | `MODEL_TIMEOUT_S` | Per-request timeout forwarded to `litellm.completion` (default 120) |
 | `MODEL_TEMPERATURE`, `MODEL_MAX_TOKENS`, `MODEL_EXTRA_JSON` | Sampling parameters; unset means provider default |
 
-`LiteLlm.__init__(model, **kwargs)` stores every kwarg and merges it into each `litellm.completion` call (`google/adk/models/lite_llm.py`, `_additional_args`), which is how the base URL, key, timeout and sampling parameters reach the provider.
+`LiteLlm.__init__(model, **kwargs)` stores every kwarg and merges it into each `litellm.completion` call, which is how the base URL, key, timeout and sampling parameters reach the provider. Where the model runs is irrelevant to the tools: ADK serialises the tool functions into JSON schemas, the model returns tool-call requests, ADK executes the Python in this process.
 
-**Where the model runs is irrelevant to the tools.** ADK serialises the ten tool functions into JSON schemas for the request; the model returns tool-call requests; ADK executes the Python in this process and sends results back. A remote model therefore needs no tool changes, only `MODEL_API_BASE`.
-
-`GET /health` reports the resolved configuration and probes the model server; `python scripts/check_model.py` runs a completion and a tool-call round trip with the exact settings the agents use.
-
----|---|---|
-| Orchestrator | `orchestrator_agent.py:315` | `ollama_chat/gemma4:e4b` |
-| Feature | `feature_agent.py:309` | `ollama_chat/gemma4:e4b` |
-| Formatter | `formatter_agent.py:231` | `ollama_chat/gemma4:e4b` |
-| Report | `report_agent.py:133` | `ollama_chat/gemma4:e4b` |
-
-**No generation parameters are set at any call site** — no `temperature`, `max_tokens`, `top_p`, or `generate_content_config`. All calls use LiteLLM/Ollama defaults.
-
-There is no environment variable for the model name and no `OLLAMA_API_BASE` setting anywhere in the repo. Changing the model or pointing at a remote Ollama host requires editing source in four places.
+`GET /health` reports the resolved configuration and probes the model server; `scripts/check_model.py --adk` runs a completion, a tool call, a round trip and ADK's tool loop with the exact agent settings.
 
 ---
 
@@ -194,156 +157,116 @@ There is no environment variable for the model name and no `OLLAMA_API_BASE` set
 |---|---|---|---|
 | Session state | none | one session | Postgres via ADK |
 | User state | `user:` | all sessions for that user | Postgres via ADK |
-| Stage handoff | none (`output_key`) | one invocation | session state |
+| Invocation-only | `temp:` | one invocation, never merged into `session.state` | in the event's own delta only |
 | Event log | — | one session | Postgres via ADK |
-| Tools data | — | permanent | Postgres via `psycopg2` |
+| Tools data, traces | — | permanent | Postgres via `psycopg2` |
 
 ### Keys in use
 
-**`user:`-scoped** — written by `POST /set-user-profile` (`app/routers/user_profile.py:43-56`), read by tools and prompts:
-
-`user:user_id`, `user:user_name`, `user:age`, `user:weight`, `user:height`, `user:gender`, `user:chronicDiseases`, `user:allergies`, `user:medications`, `user:mobilityStatus`, `user:bloodType`, `user:caregiver_ids`, `user:caregivers`, `user:preferences`
+**`user:`-scoped** — written by `POST /set-user-profile`, read by tools, prompts and the auth middleware:
+`user:user_id`, `user:user_name`, `user:age`, `user:weight`, `user:height`, `user:gender`, `user:chronicDiseases`, `user:allergies`, `user:medications`, `user:mobilityStatus`, `user:bloodType`, `user:caregiver_ids` (caregiver **allow-list**), `user:caregivers` (device tokens, caregiver-written), `user:preferences`.
 
 **Session-scoped:**
 
-| Key | Written | Read |
+| Key | Written by | Read by |
 |---|---|---|
-| `orchestrator_result` | `orchestrator_agent.py:318` | `feature_agent.py:63`, `callbacks.py:154` |
-| `feature_result` | `feature_agent.py:324` | `formatter_agent.py:50` |
-| `final_response` | `formatter_agent.py:234` | — (streamed to client) |
-| `conversation_turn_count` | `callbacks.py:109` | `callbacks.py:158` |
-| `conversation_history` | `callbacks.py:114-120` | `orchestrator_agent.py:39` |
-| `session_headline` | `callbacks.py:175` | `chat_history.py:34` |
-| `session_preview` | `callbacks.py:176` | `chat_history.py:35` |
-| `_meal_tool_called` | `nutrition.py:29` | `nutrition.py:24` |
-| `_recipe_tool_called` | `nutrition.py:166` | `nutrition.py:161` |
-| `_interaction_tool_called` | `interactions.py:27` | `interactions.py:22` |
-| `_symptom_tool_called` | `symptoms.py:30` | `symptoms.py:25` |
-| `_store_report_tool_called` | `image_tools.py:48` | `image_tools.py:43` |
+| `orchestrator_result` | Orchestrator | Feature prompt, `route()`, callbacks |
+| `safety_status`, `intent`, `route`, `orchestrator_parse_ok` | `SenioCarePipeline` | emergency trigger, turn record, evals |
+| `feature_result` | Feature Agent, or the pipeline on the bypass path | Formatter prompt |
+| `final_response` | Formatter | streamed to client |
+| `conversation_turn_count` | `populate_user_data` | tool guards, headline |
+| `conversation_history` | `populate_user_data` | Orchestrator prompt |
+| `session_headline`, `session_preview` | `auto_save_to_memory` | chat history |
+| `profile_missing` | `populate_user_data` (no profile, `DEV_TEST_USER` unset) | — |
+| `emergency_task_started` | emergency trigger | — |
+| `_meal_tool_called` … `_store_report_tool_called` | tools, value = turn number | tools (`_guards.py`) |
 
-The five `_*_tool_called` flags carry no `temp:` prefix and are never reset, so they persist for the whole session rather than the turn — see **C-04**.
+**Why the guards store the turn number, not a `temp:` flag.** ADK's `BaseSessionService._update_session_state` skips `temp:` keys, so a `temp:` flag set by one tool call is invisible to the next tool call in the same turn. The turn-number guard blocks duplicates within a turn and resets naturally on the next one.
 
 ### The temp-session pattern
 
-Reading or writing `user:`-scoped state outside an agent invocation is done by creating a throwaway session, reading its state, and deleting it. Eight call sites use this:
-
-`user_profile.py:36`, `:88`, `:172`, `:196`, `:229` · `reports.py:103` · `scheduler.py:82` · `tools/reports.py:155`
-
-Each costs two or three database round-trips to read one dictionary. Orphaned temp sessions leak into chat history because the filter at `chat_history.py:29` matches only the `_profile_` prefix — see **R-06**.
+Reading or writing `user:`-scoped state outside an agent invocation is done by creating a throwaway session, reading its state, and deleting it (`user_profile.py`, `reports.py`, `scheduler.py`, `tools/reports.py`, `auth.py`). All temp session ids start with `_` and are hidden from chat history. It costs two or three round-trips per read; the auth middleware caches caregiver allow-lists for 60 s.
 
 ---
 
 ## 6. Data model
 
-### Tools database — `seniocare/data/database.py:119-222`
+### Tools database — `seniocare/data/database.py`
 
 | Table | Purpose | Seed rows |
 |---|---|---|
 | `meals` | Meals with nutrition and recipes | 19 |
 | `condition_dietary_rules` | Nutrient ceilings per condition | — |
 | `drug_food_interactions` | Drug↔food effects and severity | 20 |
-| `disease_symptoms` | Disease→symptom lists with severity | 15 |
+| `disease_symptoms` | Disease→symptom lists with severity | 15 (81 phrases; Arabic synonyms in `seeds/symptom_synonyms_ar.json`) |
 | `disease_precautions` | Precautions per disease | — |
 | `food_allergens` | Food→allergen category | 23 |
 | `exercises` | Exercises by mobility level | — |
 | `medical_reports` | Stored image-analysis results | — |
-| `health_reports` | Generated reports (`tools/reports.py:42-57`) | — |
+| `health_reports` | Generated reports | — |
+| `llm_traces` | One row per LLM call, tool call, stage, turn, HTTP request (`seniocare/observability.py`) | — |
 
-Seeds load from `seniocare/data/seeds/*.json`.
+Columns are `TEXT` (JSON payloads and timestamps included) except `llm_traces`. Schema is `CREATE TABLE IF NOT EXISTS` at import; there is no migration tool.
 
-**Every column is `TEXT`**, including JSON payloads (`ingredients TEXT`, `database.py:126`) and timestamps (`generated_at TEXT`, `reports.py:54`). Report date filtering is therefore string comparison.
-
-Seven indexes exist (`database.py:225-231`, `reports.py:58-68`). One is defeated by a function on the indexed column at `interactions.py:67`.
-
-Schema is created by `CREATE TABLE IF NOT EXISTS` at import time. **There is no migration tool** — `IF NOT EXISTS` never alters an existing table, so schema changes cannot be applied to a live database.
+**Connections** (`database.py`): a per-process pool hands out proxies whose `close()` returns the connection; connects use libpq's `connect_timeout` and keepalives; query waits run through a psycopg2 wait callback with a client-side deadline (`APP_DATABASE_QUERY_TIMEOUT_S`). Background: `docs/FINDINGS.md` F-01.
 
 ### Session database
 
-Managed entirely by ADK's `DatabaseSessionService` (`app/config.py:90`). The URL is rewritten at `app/config.py:45-59` to add the `+asyncpg` driver prefix and strip `sslmode` / `channel_binding`, which asyncpg does not accept as URL parameters.
-
-`MEMORY_SERVICE_URI` is `None` (`app/config.py:63`) — ADK memory supports only Vertex AI Memory Bank URIs, not Postgres. Cross-session continuity is therefore carried entirely by `user:`-prefixed state.
+Managed by ADK's `DatabaseSessionService` (`app/config.py`). The URL is rewritten to add the `+asyncpg` prefix and strip `sslmode` / `channel_binding`. No memory service is configured; cross-session continuity is carried by `user:` state.
 
 ---
 
 ## 7. HTTP surface
 
-### Custom endpoints
+Middleware order (outermost first): `AuthMiddleware` → trace middleware → app. Public paths: `/`, `/health`, `/docs*`, `/openapi.json`, `/redoc`, `/list-apps`. Admin-only (uid ∈ `ADMIN_UIDS`): `/metrics*`, `/dev-ui*`, `/debug/*`, `/builder/*`, ADK eval routes.
 
 | Method | Path | Handler |
 |---|---|---|
-| GET | `/health` | `app/routers/health.py:10` |
-| POST | `/create-session` | `app/routers/sessions.py:14` |
-| GET | `/chat-history/{user_id}` | `app/routers/chat_history.py:11` |
-| GET | `/chat-history/{user_id}/{session_id}` | `app/routers/chat_history.py:50` |
-| POST | `/set-user-profile/{user_id}` | `app/routers/user_profile.py:27` |
-| GET | `/get-user-profile/{user_id}` | `app/routers/user_profile.py:78` |
-| POST | `/sync-user-profile/{user_id}` | `app/routers/user_profile.py:130` |
-| POST | `/register-caregiver-fcm` | `app/routers/user_profile.py:186` |
-| POST | `/reports/generate` | `app/routers/reports.py:22` |
-| GET | `/reports/{user_id}` | `app/routers/reports.py:141` |
-| GET | `/reports/{user_id}/{report_id}` | `app/routers/reports.py:173` |
-| GET | `/reports/medical/{user_id}` | `app/routers/reports.py:200` — **unreachable, see C-16** |
-| POST | `/reports/seed` | `app/routers/reports.py:225` — dev-only, unauthenticated, can delete data |
+| GET | `/health` | `app/routers/health.py` — config, auth mode, DB and model probes |
+| GET | `/metrics/summary` | `app/routers/metrics.py` — aggregates from `llm_traces` |
+| POST | `/create-session` | `app/routers/sessions.py` |
+| GET | `/chat-history/{user_id}` | `app/routers/chat_history.py` |
+| GET | `/chat-history/{user_id}/{session_id}` | `app/routers/chat_history.py` |
+| POST | `/set-user-profile/{user_id}` | `app/routers/user_profile.py` |
+| GET | `/get-user-profile/{user_id}` | `app/routers/user_profile.py` |
+| POST | `/sync-user-profile/{user_id}` | `app/routers/user_profile.py` |
+| POST | `/register-caregiver-fcm` | `app/routers/user_profile.py` — per-elder lock |
+| POST | `/reports/generate` | `app/routers/reports.py` |
+| GET | `/reports/medical/{user_id}` | `app/routers/reports.py` — registered before the parametric route (C-16) |
+| POST | `/reports/seed` | `app/routers/reports.py` — only when `AUTH_MODE=off` |
+| GET | `/reports/{user_id}` | `app/routers/reports.py` |
+| GET | `/reports/{user_id}/{report_id}` | `app/routers/reports.py` |
 
-### ADK-provided endpoints
+ADK-provided: `/run_sse`, `/run`, `/list-apps`, `/apps/{app}/users/{user}/sessions/...`, the dev UI. `/run_sse` is documented manually in `app/openapi.py`.
 
-`/run_sse`, `/list-apps`, `/apps/{app}/users/{user}/sessions/...`, and the dev web UI (`SERVE_WEB_INTERFACE = True`, `app/config.py:85`).
-
-`/run_sse` — the endpoint the Flutter client depends on — **is absent from the Swagger schema**, because `_CUSTOM_PATHS` at `app/openapi.py:13-23` does not list it.
-
----
-
-## 8. Known limitations
-
-Summarised from `docs/AUDIT.md`. Full detail, triggers, and confidence levels are there.
-
-### Security
-
-- **No authentication on any endpoint** (**C-01**). `user_id` is an unauthenticated path parameter; any caller can read or overwrite any user's medical profile, read their conversations, or attach an FCM token to their emergency alerts.
-- **CORS is `"*"`** (`app/config.py:76`).
-- **No rate limiting, no audit log, no data-deletion path.**
-- `sessions.db` appears in git history, though it is gitignored and untracked now.
-
-### Safety and correctness
-
-- **Safety routing is prose, not control flow** (**C-02**). The Feature Agent executes on the emergency path with all 10 tools bound.
-- **`SAFETY_STATUS` is never read** (**C-03**). Escalation depends on one regex matching `INTENT: emergency` verbatim; any deviation silently skips escalation with no log.
-- **Tool guards persist across turns** (**C-04**). From turn 2 onward, guarded tools short-circuit — drug-interaction screening silently stops running.
-- **Fabricated patient profile injected when identity is missing** (**C-11**).
-- **Symptom matching over-matches** (**C-12**). Substring matching plus severity-first sorting means a report of mild dizziness can produce `is_emergency: True`.
-- **Symptom database is English-only** while users write Egyptian Arabic (**C-13**).
-- **Allergen and drug matching are exact-string** and work only because the 23 seed allergen rows were hand-tuned against the 19 seed meals (**C-14**).
-- **Emergency notification is a GC-eligible fire-and-forget task** with no retry, no persistence, and no failure alerting (**C-09**).
-
-### Data and reporting
-
-- **Report date ranges are ignored** for conversation data (**C-07**). Daily and monthly reports aggregate identical inputs.
-- **Four aggregation fields are declared, read, and never populated** (**C-08**): `symptoms_reported`, `meals_accessed`, `exercises_accessed`, `interaction_warnings`.
-- **Report status silently defaults to `"moderate"`** when the model's `STATUS:` line is missing or unparseable (**C-10**).
-- **`GET /reports/medical/{user_id}` always returns 404** due to route shadowing (**C-16**).
-
-### Performance
-
-- **Synchronous `psycopg2` and `requests` called from async handlers** block the event loop (**R-01**).
-- **No connection pooling** — a new TCP+TLS connection per query (`database.py:71`).
-- **Three N+1 patterns** (**R-02**), the worst being up to 100 queries for a single drug-interaction check.
-- **No timeout on any LLM call** (**R-04**).
-
-### Engineering
-
-- **No migrations**, no Docker, no CI, no linter, no type checker.
-- **No observability** — no tracing, no metrics, no token or cost accounting, and the two `logging` modules are never configured so their `info` records are discarded.
-- **No LLM evaluation.** The 124 tests cover deterministic Python only; none asserts on model output. Scaffolding for this now exists in `evals/`.
-- **Test suite does not fully collect** — `tests/integration/test_multi_tool_flows.py` imports the deleted `seniocare.tools.medication`.
-- **Prompt/code drift**: two non-existent tools and two unconfigured model names in the Orchestrator prompt; a medication-schedule field referencing a deleted module.
+**Lifecycle.** `main.py` wraps ADK's lifespan: on startup it starts the Postgres trace sink, the APScheduler jobs and Firebase Admin; on shutdown it stops the scheduler, flushes the sink and closes the DB pool. (`@app.on_event` handlers were silently ignored under ADK's lifespan — `docs/FINDINGS.md` F-02.)
 
 ---
 
-## 9. Where to read next
+## 8. Observability
+
+`seniocare/observability.py`: one `emit(kind, **fields)` sink; JSON lines on stdout (`configure_logging()`), a batching Postgres sink into `llm_traces`, and in-memory subscribers (the eval harness). Record kinds: `llm_call`, `tool_call`, `stage`, `turn`, `serpapi_call`, `emergency_report`, `emergency_notify`, `emergency_task`, `report_parse`, `profile_missing`, `auth_denied`, `http_request`. `user_id` is stored only as a truncated SHA-256. Cost views per LLM call: token-priced at `COST_REFERENCE_MODEL`, actual price when the model is hosted, `MODEL_GPU_USD_PER_HOUR × wall time`. `app/metrics_queries.py` holds the aggregations used by both `GET /metrics/summary` and `scripts/metrics_report.py`. Design: `docs/INSTRUMENTATION.md`.
+
+---
+
+## 9. Known limitations
+
+- **Single process.** Per-elder registration lock and the auth caregiver cache are in-process.
+- **Auth scope.** No token revocation check, no rate limiting, no audit log, no data-deletion path; CORS `*`.
+- **Prompt volume.** ~10k prompt tokens per ALLOWED turn across three stages (F-03).
+- **Knowledge base.** 15 conditions; a symptom the table does not know cannot be assessed.
+- **Human-review tier pending** for emergency adequacy, clinical appropriateness and dialect.
+- **No migrations, no Docker, no lock file.**
+
+---
+
+## 10. Where to read next
 
 | Question | Document |
 |---|---|
-| What is broken, and how badly? | `docs/AUDIT.md` |
-| How do I measure any of this? | `docs/INSTRUMENTATION.md` |
+| What was broken before, and how badly? | `docs/AUDIT.md` |
+| What did running it reveal? | `docs/FINDINGS.md` |
+| What are the before/after numbers? | `docs/RESULTS.md` |
+| How was that measured? | `docs/EXPERIMENTS.md`, `docs/INSTRUMENTATION.md` |
 | How do I test agent behaviour? | `evals/schema.md`, `evals/runner.py` |
-| How do I run it? | `README.md` |
+| What was the plan and what deviated? | `docs/PLAN.md` |
