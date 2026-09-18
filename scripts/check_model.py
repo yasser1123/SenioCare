@@ -263,33 +263,44 @@ async def main() -> int:
     info = describe_model()
 
     checks: list[Check] = []
+
+    def progress(c: Check) -> Check:
+        if not args.json:
+            tag = {True: "PASS", False: "FAIL", None: "SKIP"}[c.ok]
+            lat = f"{c.latency_ms:>6} ms" if c.latency_ms is not None else "        -"
+            print(f"[{tag}] {c.name:<16} {lat}  {c.detail}", flush=True)
+        checks.append(c)
+        return c
+
+    if not args.json:
+        print(f"model      : {info['model']}  ({info['location']})")
+        print(f"endpoint   : {info['api_base'] or 'provider default'}   key: {info['api_key']}   timeout: {info['timeout_s']}s", flush=True)
     if not args.skip_reachability:
-        checks.append(await check_reachable())
-        if checks[-1].ok is False:
-            # Nothing else can work; report and stop.
-            return _report(info, checks, args.json)
+        if progress(await check_reachable()).ok is False:
+            return _report(info, checks, args.json, header=False)
 
-    checks.append(await check_completion(settings))
+    progress(await check_completion(settings))
     tool_check, calls = await check_tool_call(settings)
-    checks.append(tool_check)
-    checks.append(await check_tool_round_trip(settings, calls))
+    progress(tool_check)
+    progress(await check_tool_round_trip(settings, calls))
     if args.adk:
-        checks.append(await check_adk_tool_loop())
-    return _report(info, checks, args.json)
+        progress(await check_adk_tool_loop())
+    return _report(info, checks, args.json, header=False)
 
 
-def _report(info: dict, checks: list[Check], as_json: bool) -> int:
+def _report(info: dict, checks: list[Check], as_json: bool, header: bool = True) -> int:
     failed = [c for c in checks if c.ok is False]
     if as_json:
         print(json.dumps({"model": info, "checks": [c.as_dict() for c in checks], "ok": not failed}, ensure_ascii=False, indent=2))
     else:
-        print(f"model      : {info['model']}  ({info['location']})")
-        print(f"endpoint   : {info['api_base'] or 'provider default'}   key: {info['api_key']}   timeout: {info['timeout_s']}s")
-        print()
-        for c in checks:
-            tag = {True: "PASS", False: "FAIL", None: "SKIP"}[c.ok]
-            lat = f"{c.latency_ms:>6} ms" if c.latency_ms is not None else "        -"
-            print(f"[{tag}] {c.name:<16} {lat}  {c.detail}")
+        if header:
+            print(f"model      : {info['model']}  ({info['location']})")
+            print(f"endpoint   : {info['api_base'] or 'provider default'}   key: {info['api_key']}   timeout: {info['timeout_s']}s")
+            print()
+            for c in checks:
+                tag = {True: "PASS", False: "FAIL", None: "SKIP"}[c.ok]
+                lat = f"{c.latency_ms:>6} ms" if c.latency_ms is not None else "        -"
+                print(f"[{tag}] {c.name:<16} {lat}  {c.detail}")
         print()
         if failed:
             print(f"RESULT: FAIL ({', '.join(c.name for c in failed)}) — do not start the app against this model.")
