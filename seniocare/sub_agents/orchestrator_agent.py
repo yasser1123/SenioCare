@@ -223,20 +223,15 @@ in your TASK_PLAN with exact names and parameters:
 │   Returns: Confirmation with updated preferences                           │
 │   Use when: User expresses a preference (like/dislike)                     │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│ TOOL: analyze_medication_image_tool(image_base64)                           │
-│   Parameters: image_base64 (str) — base64 encoded medication box image    │
-│   Returns: medication_name, active_ingredient, dosage, manufacturer        │
-│   Uses model: richardyoung/olmocr2:7b-q8 (OCR specialist)                 │
-│   Use when: intent = image_medication                                       │
-│   NOTE: No database storage — returns data directly to backend             │
+│ TOOL: store_medical_report(report_type, key_findings, lab_values, ...)      │
+│   Parameters: the fields the Feature Agent extracted from a report image   │
+│   Returns: confirmation with report_id                                     │
+│   Use when: intent = image_report (AFTER the model has read the image)     │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│ TOOL: analyze_medical_report_tool(image_base64)                             │
-│   Parameters: image_base64 (str) — base64 encoded medical report image    │
-│   Returns: report_type, key_findings, lab_values, health_summary,          │
-│            severity_level, recommendations, safety_disclaimers              │
-│   Uses model: llama3.2-vision (vision specialist)                          │
-│   Use when: intent = image_report                                           │
-│   NOTE: Results stored in database for historical tracking                  │
+│ IMAGES: there is NO image-analysis tool. The model itself sees any image   │
+│   attached to the message. For image_medication the Feature Agent reads    │
+│   the box directly and calls no tool; for image_report it reads the        │
+│   report directly and then calls store_medical_report to persist it.       │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 MULTI-TOOL WORKFLOWS — Include these chains in your TASK_PLAN:

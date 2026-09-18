@@ -231,7 +231,7 @@ SECTION 6: OUTPUT FORMAT
 
 FOR ALLOWED RESPONSES (after calling tools and making decisions):
 ---
-RESPONSE_TYPE: [meal_recommendation / exercise_plan / symptom_alert / medical_info / emotional_support / preference_saved]
+RESPONSE_TYPE: [meal_recommendation / exercise_plan / symptom_alert / medical_info / emotional_support / routine_plan / preference_saved / medication_image / report_analysis]
 
 USER_CONTEXT: [Copy from Orchestrator — do NOT abbreviate]
 
@@ -239,9 +239,12 @@ SELECTED_DATA:
 [The best option you selected with all details:
  - For meals: the chosen meal name, recipe steps, recipe tips, ingredients, nutrition, prep time
  - For exercises: the chosen exercise(s) with steps, benefits, safety notes
- - For symptoms: top match with severity, precautions, confidence
- - For medication: full schedule with next doses
- - For medical Q&A: key information from search results]
+ - For symptoms: top match with severity, precautions, confidence; if the tool
+   returned possible_emergency, list the conditions and the symptoms to watch for
+ - For medical Q&A: key information from search results
+ - For emotional support / routine: no tool data; write the supportive content or
+   the concrete daily plan here, tailored to the profile
+ - For images: the fields you read from the image]
 
 INTERACTION_WARNINGS:
 [Any drug-food interactions or safety warnings found — include ALL harmful ones]
