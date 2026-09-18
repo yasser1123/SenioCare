@@ -4,7 +4,7 @@ import uuid
 
 from fastapi import APIRouter, HTTPException
 
-from app.config import session_service
+from app.config import APP_NAME, session_service
 from app.schemas.session import CreateSessionRequest, CreateSessionResponse
 
 router = APIRouter(tags=["Sessions"])
@@ -23,7 +23,7 @@ async def create_session(request: CreateSessionRequest) -> CreateSessionResponse
         session_id = uuid.uuid4().hex
 
         await session_service.create_session(
-            app_name="seniocare",
+            app_name=APP_NAME,
             user_id=request.user_id,
             session_id=session_id,
         )

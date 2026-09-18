@@ -1,10 +1,12 @@
 """User profile router — push/pull user health data via ADK user-scoped state."""
 
+import asyncio
 import uuid
+from collections import defaultdict
 
 from fastapi import APIRouter, HTTPException
 
-from app.config import session_service
+from app.config import APP_NAME, session_service
 from app.schemas.profile import (
     UserProfileRequest,
     PartialProfileUpdate,
@@ -36,7 +38,7 @@ async def set_user_profile(user_id: str, profile: UserProfileRequest):
         temp_session_id = f"_profile_setup_{uuid.uuid4().hex[:8]}"
 
         await session_service.create_session(
-            app_name="seniocare",
+            app_name=APP_NAME,
             user_id=user_id,
             session_id=temp_session_id,
             state={
@@ -58,7 +60,7 @@ async def set_user_profile(user_id: str, profile: UserProfileRequest):
 
         # Clean up temp session — the user:-scoped state persists independently
         await session_service.delete_session(
-            app_name="seniocare",
+            app_name=APP_NAME,
             user_id=user_id,
             session_id=temp_session_id,
         )
@@ -85,7 +87,7 @@ async def get_user_profile(user_id: str):
     try:
         temp_session_id = f"_profile_read_{uuid.uuid4().hex[:8]}"
         session = await session_service.create_session(
-            app_name="seniocare",
+            app_name=APP_NAME,
             user_id=user_id,
             session_id=temp_session_id,
         )
@@ -108,7 +110,7 @@ async def get_user_profile(user_id: str):
         }
 
         await session_service.delete_session(
-            app_name="seniocare",
+            app_name=APP_NAME,
             user_id=user_id,
             session_id=temp_session_id,
         )
@@ -156,13 +158,13 @@ async def sync_user_profile(user_id: str, updates: PartialProfileUpdate):
 
         temp_session_id = f"_profile_sync_{uuid.uuid4().hex[:8]}"
         await session_service.create_session(
-            app_name="seniocare",
+            app_name=APP_NAME,
             user_id=user_id,
             session_id=temp_session_id,
             state=state_updates,
         )
         await session_service.delete_session(
-            app_name="seniocare",
+            app_name=APP_NAME,
             user_id=user_id,
             session_id=temp_session_id,
         )
@@ -198,13 +200,26 @@ async def register_caregiver_fcm(request: CaregiverFCMRequest):
     user:caregivers as a list. If this caregiver already exists in the list,
     their data (especially fcm_token) is updated. Otherwise they are appended.
     """
+    elder_user_id = request.elder_user_id
+    # Two caregivers registering for the same elder at once used to race on
+    # the read-modify-write below and one registration was silently lost
+    # (AUDIT R-03). The lock is per elder and per process.
+    async with _caregiver_locks[elder_user_id]:
+        return await _register_caregiver_locked(request)
+
+
+# Per-elder locks (single-process; a multi-worker deployment needs a DB-level lock)
+_caregiver_locks: dict = defaultdict(asyncio.Lock)
+
+
+async def _register_caregiver_locked(request: CaregiverFCMRequest):
     try:
         elder_user_id = request.elder_user_id
 
         # Read the elder's current session state
         temp_session_id = f"_fcm_reg_{uuid.uuid4().hex[:8]}"
         session = await session_service.create_session(
-            app_name="seniocare",
+            app_name=APP_NAME,
             user_id=elder_user_id,
             session_id=temp_session_id,
         )
@@ -233,7 +248,7 @@ async def register_caregiver_fcm(request: CaregiverFCMRequest):
 
         # Clean up the read session
         await session_service.delete_session(
-            app_name="seniocare",
+            app_name=APP_NAME,
             user_id=elder_user_id,
             session_id=temp_session_id,
         )
@@ -241,13 +256,13 @@ async def register_caregiver_fcm(request: CaregiverFCMRequest):
         # Write the updated caregivers list back to the elder's state
         write_session_id = f"_fcm_write_{uuid.uuid4().hex[:8]}"
         await session_service.create_session(
-            app_name="seniocare",
+            app_name=APP_NAME,
             user_id=elder_user_id,
             session_id=write_session_id,
             state={"user:caregivers": caregivers},
         )
         await session_service.delete_session(
-            app_name="seniocare",
+            app_name=APP_NAME,
             user_id=elder_user_id,
             session_id=write_session_id,
         )

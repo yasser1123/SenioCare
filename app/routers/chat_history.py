@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException
 
-from app.config import session_service
+from app.config import APP_NAME, session_service
 
 router = APIRouter(tags=["Chat History"])
 
@@ -18,14 +18,16 @@ async def get_chat_history(user_id: str):
     """
     try:
         response = await session_service.list_sessions(
-            app_name="seniocare",
+            app_name=APP_NAME,
             user_id=user_id,
         )
 
         conversations = []
         for session in response.sessions:
-            # Skip internal profile-setup sessions
-            if session.id.startswith("_profile_"):
+            # Skip internal temp sessions. Every temp-session helper uses a
+            # leading underscore (_profile_*, _fcm_*, _auth_*); the old filter
+            # only knew about _profile_ (AUDIT R-06).
+            if session.id.startswith("_"):
                 continue
 
             conversations.append({
@@ -56,7 +58,7 @@ async def get_conversation_turns(user_id: str, session_id: str):
     """
     try:
         session = await session_service.get_session(
-            app_name="seniocare",
+            app_name=APP_NAME,
             user_id=user_id,
             session_id=session_id,
         )
