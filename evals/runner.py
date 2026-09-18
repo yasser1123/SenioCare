@@ -1016,8 +1016,7 @@ def summary_markdown(s: dict, results: list[Result]) -> str:
            "\n## Silent failures\n",
            f"- empty final response: {pc(s['rates']['empty_final'])} · empty Feature output on ALLOWED turns (FINDINGS F-04): {s['rates']['empty_feature_when_allowed']}\n",
            f"- generations cut at the token limit (FINDINGS F-10): {s['truncation']['max_tokens_hits']} of {s['truncation']['llm_calls_by_stage']}; "
-           f"orchestrator truncated on {pc(s['truncation']['orchestrator_truncated_rate'])} of its calls
-",
+           f"orchestrator truncated on {pc(s['truncation']['orchestrator_truncated_rate'])} of its calls\n",
            "\n## Latency, tokens, cost\n",
            f"- e2e p50 **{s['latency']['e2e_p50_ms']} ms**, p95 {s['latency']['e2e_p95_ms']} ms, max {s['latency']['e2e_max_ms']} ms\n"
            f"- stage p50 ms: {s['latency']['stage_p50_ms']}\n- stage p95 ms: {s['latency']['stage_p95_ms']}\n"

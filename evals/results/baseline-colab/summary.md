@@ -46,6 +46,7 @@
 
 ## Silent failures
 - empty final response: 0.0% · empty Feature output on ALLOWED turns (FINDINGS F-04): 0
+- generations cut at the token limit (FINDINGS F-10): {'orchestrator_agent': 60, 'formatter_agent': 15} of {'orchestrator_agent': 60, 'feature_agent': 98, 'formatter_agent': 60}; orchestrator truncated on 100.0% of its calls
 
 ## Latency, tokens, cost
 - e2e p50 **60563 ms**, p95 98782 ms, max 122532 ms

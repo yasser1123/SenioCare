@@ -177,6 +177,18 @@
       "save_user_preference": 0
     }
   },
+  "truncation": {
+    "max_tokens_hits": {
+      "orchestrator_agent": 60,
+      "formatter_agent": 15
+    },
+    "llm_calls_by_stage": {
+      "orchestrator_agent": 60,
+      "feature_agent": 98,
+      "formatter_agent": 60
+    },
+    "orchestrator_truncated_rate": 1.0
+  },
   "latency": {
     "e2e_p50_ms": 60563,
     "e2e_p95_ms": 98782,
