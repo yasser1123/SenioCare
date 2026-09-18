@@ -10,6 +10,7 @@ import re
 from datetime import datetime
 
 from seniocare import observability as obs
+from seniocare.observability import parse_intent, parse_safety_status
 
 # =============================================================================
 # TEST USER (used when no backend has pushed a profile)
@@ -153,9 +154,10 @@ async def auto_save_to_memory(callback_context):
     """
     state = callback_context.state
 
-    # --- Headline generation (first turn only) ---
+    # --- Routing decision (written by seniocare/pipeline.py; parsed here as a fallback) ---
     orchestrator_output = state.get("orchestrator_result", "")
-    intent = _extract_intent(orchestrator_output)
+    intent = state.get("intent") or _extract_intent(orchestrator_output)
+    safety_status = state.get("safety_status") or (parse_safety_status(orchestrator_output) or "unknown")
 
     if state.get("conversation_turn_count") == 1 and not state.get("session_headline"):
         try:
@@ -183,8 +185,8 @@ async def auto_save_to_memory(callback_context):
             state["session_headline"] = "💬 محادثة جديدة"
             print(f"[SenioCare] Headline generation notice: {e}")
 
-    # --- Emergency report auto-trigger ---
-    if intent == "emergency":
+    # --- Emergency report auto-trigger (either signal is enough, AUDIT C-03) ---
+    if intent == "emergency" or safety_status == "EMERGENCY":
         await _trigger_emergency_report(state, orchestrator_output)
 
     # --- Memory auto-save ---
@@ -199,7 +201,8 @@ async def auto_save_to_memory(callback_context):
 
     # --- Turn record (latency, tokens, cost, routing) ---
     try:
-        obs.turn_finished(callback_context, emergency_triggered=(intent == "emergency"))
+        obs.turn_finished(callback_context, emergency_triggered=(intent == "emergency" or safety_status == "EMERGENCY"),
+                          route=state.get("route"))
     except Exception as e:
         print(f"[SenioCare] Turn record warning: {e}")
 
@@ -210,13 +213,13 @@ async def auto_save_to_memory(callback_context):
 
 
 def _extract_intent(orchestrator_output: str) -> str:
-    """Extract the INTENT value from the orchestrator's structured text output."""
-    if not orchestrator_output:
-        return "unknown"
-    match = re.search(r"INTENT:\s*(\w+)", orchestrator_output)
-    if match:
-        return match.group(1).lower().strip()
-    return "unknown"
+    """Extract the INTENT value from the orchestrator's structured text output.
+
+    Tolerant of markdown bold, extra spaces and a full-width colon (the strict
+    strict ``INTENT`` regex silently returned "unknown" on any of those,
+    AUDIT C-03). Same parser as seniocare/observability.py.
+    """
+    return parse_intent(orchestrator_output) or "unknown"
 
 
 async def _trigger_emergency_report(state: dict, orchestrator_output: str) -> None:

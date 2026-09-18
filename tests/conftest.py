@@ -49,6 +49,21 @@ _mock_adk_models_lite_llm.LiteLlm = type(
     "LiteLlm", (), {"__init__": lambda self, **kw: None}
 )
 
+
+# BaseAgent + the event/context modules used by seniocare/pipeline.py. The stub
+# accepts any keyword fields (pydantic-like) so SenioCarePipeline can subclass it.
+class _MockBaseAgent:
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+
+_mock_adk_agents.BaseAgent = _MockBaseAgent
+_mock_adk_agents_ctx = types.ModuleType("google.adk.agents.invocation_context")
+_mock_adk_agents_ctx.InvocationContext = type("InvocationContext", (), {})
+_mock_adk_events = types.ModuleType("google.adk.events")
+_mock_adk_events.Event = type("Event", (), {"__init__": lambda self, **kw: self.__dict__.update(kw)})
+_mock_adk_events.EventActions = type("EventActions", (), {"__init__": lambda self, **kw: self.__dict__.update(kw)})
+
 for name, mod in [
     ("google", _mock_google),
     ("google.adk", _mock_adk),
@@ -56,6 +71,8 @@ for name, mod in [
     ("google.adk.agents", _mock_adk_agents),
     ("google.adk.models", _mock_adk_models),
     ("google.adk.models.lite_llm", _mock_adk_models_lite_llm),
+    ("google.adk.agents.invocation_context", _mock_adk_agents_ctx),
+    ("google.adk.events", _mock_adk_events),
 ]:
     sys.modules.setdefault(name, mod)
 
