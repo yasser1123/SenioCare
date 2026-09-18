@@ -137,64 +137,10 @@ async def _notify_caregivers_for_report(
         return {"sent": 0, "failed": 0, "details": [str(e)]}
 
 
-@router.get("/{user_id}")
-async def list_reports(
-    user_id: str,
-    report_type: Optional[str] = None,
-    limit: int = 20,
-):
-    """List all health reports for a user.
-
-    Args:
-        user_id: The user's identifier.
-        report_type: Optional filter ('daily', 'weekly', 'monthly', 'emergency').
-        limit: Maximum number of reports to return (default 20).
-
-    Returns:
-        List of report summaries ordered by generation date (most recent first).
-    """
-    from seniocare.tools.reports import get_health_reports
-
-    reports = get_health_reports(
-        user_id=user_id,
-        report_type=report_type,
-        limit=limit,
-    )
-
-    return {
-        "success": True,
-        "user_id": user_id,
-        "count": len(reports),
-        "reports": reports,
-    }
-
-
-@router.get("/{user_id}/{report_id}")
-async def get_report_detail(user_id: str, report_id: str):
-    """Get full details of a specific health report.
-
-    Args:
-        user_id: The user's identifier (for validation).
-        report_id: The report's identifier.
-
-    Returns:
-        Full report content with all sections and recommendations.
-    """
-    from seniocare.tools.reports import get_health_report_detail
-
-    report = get_health_report_detail(report_id)
-
-    if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
-
-    if report.get("user_id") != user_id:
-        raise HTTPException(status_code=403, detail="Access denied")
-
-    return {
-        "success": True,
-        "report": report,
-    }
-
+# NOTE: literal paths must be registered BEFORE the parametric
+# /{user_id}/{report_id} route. Starlette matches in registration order, so
+# /medical/elder_123 used to be captured as user_id='medical',
+# report_id='elder_123' and always returned 404 (docs/AUDIT.md C-16).
 
 @router.get("/medical/{user_id}")
 async def get_medical_reports(user_id: str):
@@ -267,3 +213,62 @@ async def seed_test_data(user_id: str = "elder_123", clear: bool = False):
             status_code=500,
             detail=f"Seeding failed: {str(e)}",
         )
+
+@router.get("/{user_id}")
+async def list_reports(
+    user_id: str,
+    report_type: Optional[str] = None,
+    limit: int = 20,
+):
+    """List all health reports for a user.
+
+    Args:
+        user_id: The user's identifier.
+        report_type: Optional filter ('daily', 'weekly', 'monthly', 'emergency').
+        limit: Maximum number of reports to return (default 20).
+
+    Returns:
+        List of report summaries ordered by generation date (most recent first).
+    """
+    from seniocare.tools.reports import get_health_reports
+
+    reports = get_health_reports(
+        user_id=user_id,
+        report_type=report_type,
+        limit=limit,
+    )
+
+    return {
+        "success": True,
+        "user_id": user_id,
+        "count": len(reports),
+        "reports": reports,
+    }
+
+
+@router.get("/{user_id}/{report_id}")
+async def get_report_detail(user_id: str, report_id: str):
+    """Get full details of a specific health report.
+
+    Args:
+        user_id: The user's identifier (for validation).
+        report_id: The report's identifier.
+
+    Returns:
+        Full report content with all sections and recommendations.
+    """
+    from seniocare.tools.reports import get_health_report_detail
+
+    report = get_health_report_detail(report_id)
+
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    if report.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    return {
+        "success": True,
+        "report": report,
+    }
+
