@@ -177,13 +177,23 @@ def report(name, ok, detail):
     print(f"[{'PASS' if ok else 'FAIL'}] {name}: {detail}")
     return ok
 
-# --- Test 1: plain chat in Egyptian Arabic
+# --- Warm-up: the first request after load is slow and is not what we measure
+chat([{"role": "user", "content": "hi"}], max_tokens=8)
+
+# --- Test 1: plain chat in Egyptian Arabic.
+# Thinking models (gemma4, qwen3, …) spend completion tokens on hidden reasoning
+# before answering; give them room, and report empty content explicitly.
 resp = chat([{"role": "system", "content": "أنت مساعد صحي لكبار السن. رد باللهجة المصرية في جملتين."},
-             {"role": "user", "content": "عايز أكلة خفيفة على الغدا"}])
-text = resp["choices"][0]["message"]["content"] or ""
+             {"role": "user", "content": "عايز أكلة خفيفة على الغدا"}], max_tokens=768)
+msg1 = resp["choices"][0]["message"]
+text = msg1.get("content") or ""
+reasoning = msg1.get("reasoning") or msg1.get("reasoning_content") or ""
 usage = resp.get("usage", {})
 t1 = report("plain chat", len(text.strip()) > 0,
-            f"{resp['_latency_s']}s, {usage.get('completion_tokens')} completion tokens → {text[:120]!r}")
+            f"{resp['_latency_s']}s, {usage.get('completion_tokens')} completion tokens"
+            + (f" ({len(reasoning)} chars hidden reasoning)" if reasoning else "")
+            + f" → {text[:120]!r}"
+            + ("" if text.strip() else "  <- empty content: raise max_tokens or disable thinking mode"))
 
 # --- Test 2: tool calling (schema mirrors seniocare/tools/nutrition.py::get_meal_options)
 tools = [{

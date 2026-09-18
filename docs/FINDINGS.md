@@ -89,11 +89,27 @@ Token-priced cost at the reference model (`gemini/gemini-2.5-flash` list price):
 
 ---
 
+## F-06 · gemma4:e4b does emit tool calls; the notebook's own gate produced a false negative
+
+**Observation.** Two gates ran against the same Colab T4 Ollama serving `gemma4:e4b` through the OpenAI-compatible `/v1` endpoint and a cloudflared quick tunnel.
+
+**Evidence.**
+- `scripts/check_model.py --adk` from the backend (LiteLLM `openai/gemma4:e4b`, `MODEL_API_BASE=https://…trycloudflare.com/v1`): **5/5 PASS** — reachability 0.7 s, completion 4.5 s (46/22 tokens), tool call 2.1 s → `get_meal_options({'meal_type': 'lunch'})`, tool-result round trip 4.8 s, ADK Runner tool loop 3.8 s with the tool executed in-process.
+- The notebook's in-Colab gate reported **FAIL**, but only on test 1: "plain chat: 67.88 s, 256 completion tokens → ''". The first request after load spent its entire 256-token budget on hidden reasoning and returned empty content (same failure mode as F-04); tests 2 and 3 (tool call, round trip) passed at 2.3 s and 2.0 s.
+
+**Implication.** (1) The model is suitable for the Feature Agent; the open question in F-04's table is closed. (2) Latency per call on a T4 is 2–5 s versus 12–22 s for a 0.6B model on the local CPU, so the three-stage pipeline should land around 10–20 s per turn. (3) Any gate for a reasoning model must budget for hidden reasoning tokens or it will reject working models.
+
+**Action.** `.env` points at the tunnel; `check_model.py` is the authoritative gate (reasoning-aware since Phase 1); the notebook's test 1 gets the same treatment. Baseline eval run launched against this endpoint on commit `eval-baseline`.
+
+**Paper use.** Experimental setup (model, hardware, transport) and a methods note on evaluating thinking models.
+
+---
+
 ## Open items being tracked
 
 | Item | Status | Where it will be answered |
 |---|---|---|
-| Does `gemma4:e4b` emit well-formed tool calls at all? | **Unverified** | Colab gate cell / `check_model.py --adk` |
+| Does `gemma4:e4b` emit well-formed tool calls at all? | **Yes** (F-06) | `check_model.py --adk`, 5/5 |
 | Turn-2 tool failure rate (AUDIT C-04) | To be measured | multi-turn eval, baseline run |
 | False-emergency rate on single mild symptoms (C-12) | To be measured | baseline run, `symptom_*` cases |
 | Arabic symptom recall (C-13) | To be measured | baseline run |
