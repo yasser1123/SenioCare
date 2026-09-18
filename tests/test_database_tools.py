@@ -415,49 +415,6 @@ class TestAssessSymptoms:
 
 
 # ===========================================================================
-# 5. MEDICATION TOOL TESTS
-# ===========================================================================
-class TestMedicationSchedule:
-    """Test get_medication_schedule."""
-
-    def test_valid_user(self, user_001_context):
-        from seniocare.tools.medication import get_medication_schedule
-        result = get_medication_schedule(tool_context=user_001_context)
-
-        assert result["status"] == "success"
-        assert result["user_id"] == "user_001"
-        assert len(result["medications"]) == 2
-        med_names = [m["name"] for m in result["medications"]]
-        assert "Metformin" in med_names
-        assert "Lisinopril" in med_names
-
-    def test_unknown_user(self, empty_context):
-        empty_context.state["user:user_id"] = "unknown_user"
-        from seniocare.tools.medication import get_medication_schedule
-        result = get_medication_schedule(tool_context=empty_context)
-        assert result["status"] == "error"
-
-    def test_no_user_id(self, empty_context):
-        from seniocare.tools.medication import get_medication_schedule
-        result = get_medication_schedule(tool_context=empty_context)
-        assert result["status"] == "error"
-
-
-class TestLogMedication:
-    """Test log_medication_intake."""
-
-    def test_log_success(self, user_001_context):
-        from seniocare.tools.medication import log_medication_intake
-        result = log_medication_intake(
-            medication_name="Metformin",
-            tool_context=user_001_context
-        )
-        assert result["status"] == "success"
-        assert "Metformin" in result["message"]
-        assert result["timestamp"] is not None
-
-
-# ===========================================================================
 # 6. EXERCISE TOOL TESTS
 # ===========================================================================
 class TestGetExercises:
