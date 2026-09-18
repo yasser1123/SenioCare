@@ -18,6 +18,8 @@ Tables:
 
 import json
 import os
+import threading
+import time
 from pathlib import Path
 
 try:
@@ -64,11 +66,28 @@ def _require_database_url() -> str:
 # ---------------------------------------------------------------------------
 
 
-# Neon's connection pooler occasionally accepts the TCP handshake and then never
-# completes the PostgreSQL startup exchange. Without a connect timeout that call
-# blocks forever (observed: test suite hanging with 0% CPU). Bound it, and keep
-# the TCP session alive so idle pooled connections are not silently dropped.
+# Neon's pooler hostname resolves to three IPs, and from some networks one of
+# them blackholes the TCP connect. libpq tries the addresses in order, so
+# without connect_timeout roughly every other connect hung forever (observed:
+# the test suite stalling at 0% CPU). With connect_timeout, a bad address
+# costs CONNECT_TIMEOUT_S and libpq falls through to the next one.
+#
+# A fresh connection therefore costs 1-10 s, and every tool call used to open
+# one. Connections are pooled and reused instead: get_connection() hands out
+# a proxy whose close() returns the underlying connection to the pool, so the
+# `conn = get_connection() ... conn.close()` pattern used everywhere keeps
+# working unchanged.
+#
+# Separately, synchronous psycopg2 has no query timeout: if the server (or the
+# path to it) stops answering after a query is sent, cursor.execute() blocks
+# forever. Also observed with Neon, on connections that had just passed a
+# SELECT 1. psycopg2's "green" wait callback lets us put a deadline on every
+# socket wait during query execution. Connects deliberately stay in blocking
+# mode (callback temporarily disabled) because only libpq's blocking connect
+# implements per-address fallback with connect_timeout.
 CONNECT_TIMEOUT_S = int(os.environ.get("APP_DATABASE_CONNECT_TIMEOUT_S", "10"))
+QUERY_TIMEOUT_S = float(os.environ.get("APP_DATABASE_QUERY_TIMEOUT_S", "20"))
+POOL_MAX_IDLE = int(os.environ.get("APP_DATABASE_POOL_SIZE", "4"))
 _CONNECT_KWARGS = {
     "connect_timeout": CONNECT_TIMEOUT_S,
     "keepalives": 1,
@@ -77,22 +96,220 @@ _CONNECT_KWARGS = {
     "keepalives_count": 3,
 }
 
+_connect_lock = threading.Lock()
+
+
+def _wait_with_deadline(conn):
+    """psycopg2 wait callback: like psycopg2.extras.wait_select, but bounded.
+
+    Raises OperationalError once QUERY_TIMEOUT_S passes without the server
+    completing the current operation. The connection is unusable afterwards
+    and is discarded by the pool on its next health check.
+    """
+    import select as _select
+    from psycopg2 import extensions as _ext
+
+    deadline = time.monotonic() + QUERY_TIMEOUT_S
+    while True:
+        state = conn.poll()
+        if state == _ext.POLL_OK:
+            return
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise psycopg2.OperationalError(
+                f"database query did not complete within {QUERY_TIMEOUT_S:g}s (client-side deadline)"
+            )
+        if state == _ext.POLL_READ:
+            _select.select([conn.fileno()], [], [], remaining)
+        elif state == _ext.POLL_WRITE:
+            _select.select([], [conn.fileno()], [], remaining)
+        else:
+            raise psycopg2.OperationalError(f"unexpected poll state {state!r}")
+
+
+if psycopg2 is not None:
+    psycopg2.extensions.set_wait_callback(_wait_with_deadline)
+
 
 def _connect(url: str, **kwargs):
-    return psycopg2.connect(url, **_CONNECT_KWARGS, **kwargs)
+    """Open a brand-new connection, in blocking mode so libpq can fall through
+    to the next resolved address when one times out."""
+    from psycopg2 import extensions as _ext
+
+    with _connect_lock:
+        _ext.set_wait_callback(None)
+        try:
+            return psycopg2.connect(url, **_CONNECT_KWARGS, **kwargs)
+        finally:
+            _ext.set_wait_callback(_wait_with_deadline)
+
+
+def _quiet_close(conn) -> None:
+    try:
+        conn.close()
+    except Exception:
+        pass
+
+
+def _healthy(conn) -> bool:
+    """Cheap liveness probe; an idle pooled connection may have been dropped server-side."""
+    try:
+        if conn.closed:
+            return False
+        cur = conn.cursor()
+        cur.execute("SELECT 1")
+        cur.fetchone()
+        cur.close()
+        conn.rollback()
+        return True
+    except Exception:
+        return False
+
+
+class _ConnectionPool:
+    """Minimal thread-safe pool: keeps up to `max_idle` idle connections.
+
+    psycopg2.pool is not used because it only retains `minconn` idle
+    connections and opens all of them eagerly at construction; here nothing
+    is opened until needed and up to `max_idle` are kept once opened.
+    """
+
+    # A connection released this recently is handed out again without the
+    # SELECT 1 probe: the probe costs two round trips (~0.4 s to us-east-1
+    # from Egypt) and a connection idle for a few seconds is not what breaks.
+    HEALTH_CHECK_AFTER_S = 30.0
+
+    def __init__(self, url: str, max_idle: int):
+        self.url = url
+        self.max_idle = max_idle
+        self._idle: list = []  # [(conn, released_at_monotonic), ...]
+        self._lock = threading.Lock()
+        self.stats = {"created": 0, "reused": 0, "discarded": 0}
+
+    def acquire(self):
+        while True:
+            with self._lock:
+                conn, released_at = self._idle.pop() if self._idle else (None, 0.0)
+            if conn is None:
+                conn = _connect(self.url, cursor_factory=RealDictCursor)
+                self.stats["created"] += 1
+                return conn
+            fresh = (time.monotonic() - released_at) < self.HEALTH_CHECK_AFTER_S
+            if fresh or _healthy(conn):
+                self.stats["reused"] += 1
+                return conn
+            self.stats["discarded"] += 1
+            _quiet_close(conn)
+
+    def release(self, conn, discard: bool = False) -> None:
+        if discard or conn.closed:
+            self.stats["discarded"] += 1
+            _quiet_close(conn)
+            return
+        with self._lock:
+            if len(self._idle) < self.max_idle:
+                self._idle.append((conn, time.monotonic()))
+                return
+        _quiet_close(conn)
+
+    def close_all(self) -> None:
+        with self._lock:
+            idle, self._idle = self._idle, []
+        for conn, _ in idle:
+            _quiet_close(conn)
+
+
+class _PooledConnection:
+    """Proxy around a pooled psycopg2 connection.
+
+    Everything is delegated to the real connection except close(), which rolls
+    back any open transaction and returns the connection to the pool instead of
+    closing it. A connection that failed is discarded rather than returned.
+    """
+
+    __slots__ = ("_conn", "_pool")
+
+    def __init__(self, conn, pool):
+        self._conn = conn
+        self._pool = pool
+
+    def __getattr__(self, name):
+        conn = object.__getattribute__(self, "_conn")
+        if conn is None:
+            raise psycopg2.InterfaceError("connection already returned to the pool")
+        return getattr(conn, name)
+
+    def close(self) -> None:
+        conn, self._conn = self._conn, None
+        if conn is None:
+            return
+        try:
+            # Only pay the round trip when a transaction is actually open.
+            if conn.info.transaction_status != psycopg2.extensions.TRANSACTION_STATUS_IDLE:
+                conn.rollback()
+        except Exception:
+            self._pool.release(conn, discard=True)
+            return
+        self._pool.release(conn)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+
+    def __del__(self):
+        # Safety net for callers that forget close(): return the connection
+        # rather than leaking it.
+        try:
+            self.close()
+        except Exception:
+            pass
+
+
+_pool = None
+_pool_lock = threading.Lock()
+
+
+def _get_pool(url: str) -> _ConnectionPool:
+    """Return the process-wide pool for `url`, creating it on first use."""
+    global _pool
+    with _pool_lock:
+        if _pool is None or _pool.url != url:
+            if _pool is not None:
+                _pool.close_all()
+            _pool = _ConnectionPool(url, POOL_MAX_IDLE)
+        return _pool
 
 
 def get_connection() -> psycopg2.extensions.connection:
-    """Return a new psycopg2 connection using RealDictCursor.
+    """Return a pooled connection using RealDictCursor.
 
-    Retries once on OperationalError (transient SSL/network drop, or a connect
-    that hit CONNECT_TIMEOUT_S).
+    Call close() when done; that returns it to the pool. Retries once if a
+    fresh connect fails (transient network drop or a connect that exhausted
+    every resolved address within CONNECT_TIMEOUT_S).
     """
     url = _require_database_url()
+    pool = _get_pool(url)
     try:
-        return _connect(url, cursor_factory=RealDictCursor)
+        conn = pool.acquire()
     except psycopg2.OperationalError:
-        return _connect(url, cursor_factory=RealDictCursor)
+        conn = pool.acquire()
+    return _PooledConnection(conn, pool)
+
+
+def pool_stats() -> dict:
+    """Connection reuse counters (exposed for /health and the metrics report)."""
+    return dict(_pool.stats) if _pool is not None else {}
+
+
+def close_pool() -> None:
+    """Close every pooled connection (app shutdown, tests)."""
+    global _pool
+    with _pool_lock:
+        if _pool is not None:
+            _pool.close_all()
+            _pool = None
 
 
 # ---------------------------------------------------------------------------
