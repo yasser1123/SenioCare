@@ -105,6 +105,37 @@ Token-priced cost at the reference model (`gemini/gemini-2.5-flash` list price):
 
 ---
 
+## F-07 · Startup crashed on a Windows console because of an emoji
+
+**Observation.** With the lifespan fix (F-02) in place, booting the app from a plain Windows console (cp1252) aborted during startup.
+
+**Evidence.** `app/scheduler.py` printed `"[Scheduler] ✅ Report scheduler started"`; `print` raised `UnicodeEncodeError: 'charmap' codec can't encode character '✅'` inside the lifespan, so the app never reached "Application startup complete". Under a UTF-8 console (`PYTHONIOENCODING=utf-8`) the same code worked, which is why the earlier uvicorn check passed.
+
+**Implication.** A logging cosmetic can be a startup failure; this only became reachable once the startup handlers actually ran (F-02).
+
+**Action.** `main.py` reconfigures stdout/stderr to UTF-8 with replacement; the scheduler message is plain ASCII.
+
+**Paper use.** Minor; an example of latent defects exposed by fixing an upstream one.
+
+---
+
+## F-08 · Baseline eval, first attempt: every turn's safety status was unreadable to the app
+
+**Observation.** First 22 turns of the baseline run (unfixed pipeline, `gemma4:e4b` on Colab T4) before the run stalled on turn 23.
+
+**Evidence** (`evals/results` not written because the run had to be killed; the per-turn log survived):
+- 22/22 turns took 51–78 s end to end (≈65 s median), three LLM calls each.
+- The production parser (`INTENT:\s*(\w+)`, `SAFETY_STATUS:\s*(\w+)`) returned **unknown for both fields on 20 of 22 turns**; the tolerant parser recovers them. gemma4 formats the fields with markdown bold (`**INTENT:** meal`), exactly the drift AUDIT C-03 predicted. On the unfixed pipeline this means the emergency trigger could never fire and the Feature Agent ran on every request.
+- Turn 23 never returned: the event loop sat idle in `select()` for 55 minutes; no timeout in the harness, in the model client path taken, or in the tools bounded it. The harness now has a per-turn timeout (default 420 s) and a 60 s heartbeat, and the baseline was re-run from a git worktree at tag `eval-baseline` so the measured code stayed unfixed while fixes continued on the branch.
+
+**Implication.** The two most consequential findings of the audit (C-02/C-03) are not hypothetical with this model: on the deployed prompt format the app could not read its own safety classification.
+
+**Action.** Full baseline re-run in progress; numbers go to `docs/RESULTS.md`. Fixes for C-02/C-03 (`seniocare/routing.py`, `seniocare/pipeline.py`) already committed on the branch.
+
+**Paper use.** Core result: prose-level safety routing measured against code-level routing on the same 60 turns.
+
+---
+
 ## Open items being tracked
 
 | Item | Status | Where it will be answered |

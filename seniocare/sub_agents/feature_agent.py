@@ -19,6 +19,7 @@ from seniocare.tools.symptoms import assess_symptoms
 from seniocare.tools.web_search import search_medical_info, search_web, search_youtube
 from seniocare.tools.image_tools import store_medical_report
 from seniocare.tools.preferences import save_user_preference
+from seniocare.tools._async import threaded
 
 FEATURE_INSTRUCTION = """
 ================================================================================
@@ -314,7 +315,7 @@ feature_agent = LlmAgent(
     **stage_callbacks(),
     instruction=FEATURE_INSTRUCTION,
     description="Executes tool calls, decides best options, and prepares structured presentation data for the Formatter Agent",
-    tools=[
+    tools=[threaded(t) for t in [
         get_meal_options,
         get_meal_recipe,
         check_drug_food_interaction,
@@ -325,6 +326,6 @@ feature_agent = LlmAgent(
         search_youtube,
         store_medical_report,
         save_user_preference,
-    ],
+    ]],
     output_key="feature_result",
 )

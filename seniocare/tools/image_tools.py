@@ -15,7 +15,7 @@ from seniocare.tools._guards import already_called_this_turn, mark_called
 from seniocare.data.database import get_connection
 
 
-async def store_medical_report(
+def store_medical_report(
     report_type: str,
     key_findings: list,
     lab_values: dict,
