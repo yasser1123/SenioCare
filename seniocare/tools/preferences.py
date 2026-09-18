@@ -7,6 +7,17 @@ stored in user:-scoped state, so they persist across all sessions.
 
 from google.adk.tools import ToolContext
 
+from seniocare.tools._text import normalize_text
+
+# Explicit pairing. The previous `key.replace("likes", "dislikes")` produced
+# "food_disdislikes" for a dislike, so a like was never removed when the user
+# changed their mind (AUDIT C-05).
+OPPOSITE_KEY = {
+    "food_likes": "food_dislikes", "food_dislikes": "food_likes",
+    "exercise_likes": "exercise_dislikes", "exercise_dislikes": "exercise_likes",
+    "general_likes": "general_dislikes", "general_dislikes": "general_likes",
+}
+
 
 def save_user_preference(
     preference_type: str,
@@ -50,19 +61,18 @@ def save_user_preference(
     else:
         key = "general_likes" if is_positive else "general_dislikes"
 
-    # Add new items (avoid duplicates)
-    existing = set(preferences.get(key, []))
-    new_items = [item.lower().strip() for item in items]
-    existing.update(new_items)
-    preferences[key] = list(existing)
+    # Add new items (normalised, de-duplicated, order preserved)
+    new_items = [normalize_text(item) for item in items if str(item).strip()]
+    new_items = list(dict.fromkeys(i for i in new_items if i))
+    merged = list(dict.fromkeys([normalize_text(i) for i in preferences.get(key, [])] + new_items))
+    preferences[key] = [i for i in merged if i]
 
-    # If user now likes something they previously disliked (or vice versa), remove conflict
-    opposite_key = key.replace("likes", "dislikes") if "likes" in key else key.replace("dislikes", "likes")
-    if opposite_key in preferences:
-        preferences[opposite_key] = [
-            item for item in preferences[opposite_key]
-            if item not in new_items
-        ]
+    # The user changed their mind: drop the same items from the opposite list.
+    opposite_key = OPPOSITE_KEY[key]
+    preferences[opposite_key] = [
+        item for item in preferences.get(opposite_key, [])
+        if normalize_text(item) not in new_items
+    ]
 
     # Save to user:-scoped state (persists across all sessions)
     state["user:preferences"] = preferences
