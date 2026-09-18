@@ -31,7 +31,7 @@ app = FastAPI(); app.include_router(reports.router)
 from starlette.routing import Match
 scope = {"type": "http", "method": "GET", "path": "/reports/medical/elder_123", "root_path": "", "headers": []}
 for route in app.router.routes:
-    m, child = route.match(scope)
+    m, child = route.matches(scope)
     if m == Match.FULL:
         print("MATCHED", route.path); break
 """
