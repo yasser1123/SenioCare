@@ -30,7 +30,9 @@ assert i_med < i_param and i_seed < i_param, paths
 app = FastAPI(); app.include_router(reports.router)
 from starlette.routing import Match
 scope = {"type": "http", "method": "GET", "path": "/reports/medical/elder_123", "root_path": "", "headers": []}
-for route in app.router.routes:
+for route in app.routes:
+    if not isinstance(route, APIRoute):
+        continue  # newer FastAPI also lists _IncludedRouter entries here
     m, child = route.matches(scope)
     if m == Match.FULL:
         print("MATCHED", route.path); break
