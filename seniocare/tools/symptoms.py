@@ -4,7 +4,16 @@ import json
 from google.adk.tools import ToolContext
 
 from seniocare.tools._guards import already_called_this_turn, mark_called
+from seniocare.tools._text import symptom_matches
 from seniocare.data.database import get_connection
+
+# An EMERGENCY disease is only escalated when the evidence is more than one
+# weak hit: at least two of its symptoms matched, or the match covers at least
+# this share of its symptom list (AUDIT C-12: "dizziness" alone used to flag a
+# stroke at 11% confidence).
+EMERGENCY_MIN_MATCHES = 2
+EMERGENCY_MIN_CONFIDENCE = 50.0
+_SEVERITY_WEIGHT = {"EMERGENCY": 30, "URGENT": 15, "MONITOR": 5, "NORMAL": 0}
 
 
 def assess_symptoms(symptoms: list, tool_context: ToolContext) -> dict:
@@ -59,19 +68,21 @@ def assess_symptoms(symptoms: list, tool_context: ToolContext) -> dict:
             disease_symptoms = json.loads(disease["symptoms"])
             disease_symptoms_lower = [s.lower() for s in disease_symptoms]
 
-            # Calculate symptom match
+            # Calculate symptom match: word-level matching in English or Arabic
+            # (seniocare/tools/_text.py + symptom_synonyms_ar.json), never a bare
+            # substring test. Each database symptom counts at most once.
             matched_symptoms = []
+            used_db = set()
             for user_symptom in symptoms_lower:
                 for db_symptom in disease_symptoms_lower:
-                    # Flexible matching: check if user symptom is contained in
-                    # DB symptom or vice versa (handles partial matches)
-                    if (user_symptom in db_symptom or
-                            db_symptom in user_symptom or
-                            _fuzzy_symptom_match(user_symptom, db_symptom)):
+                    if db_symptom in used_db:
+                        continue
+                    if symptom_matches(user_symptom, db_symptom):
                         matched_symptoms.append({
                             "reported": user_symptom,
                             "matched_to": db_symptom
                         })
+                        used_db.add(db_symptom)
                         break  # Don't double-count
 
             if not matched_symptoms:
@@ -106,6 +117,7 @@ def assess_symptoms(symptoms: list, tool_context: ToolContext) -> dict:
             )
             precautions = [row["precaution"] for row in cursor.fetchall()]
 
+            strong = (match_count >= EMERGENCY_MIN_MATCHES or final_confidence >= EMERGENCY_MIN_CONFIDENCE)
             matches.append({
                 "disease_id": disease["disease_id"],
                 "disease_name": disease["disease_name"],
@@ -116,20 +128,33 @@ def assess_symptoms(symptoms: list, tool_context: ToolContext) -> dict:
                 "total_symptoms": total_disease_symptoms,
                 "confidence": round(final_confidence, 1),
                 "is_condition_related": is_condition_related,
+                "evidence": "strong" if strong else "weak",
                 "precautions": precautions,
             })
 
-        # Sort by: severity priority first, then confidence
-        severity_order = {"EMERGENCY": 0, "URGENT": 1, "MONITOR": 2, "NORMAL": 3}
-        matches.sort(key=lambda m: (severity_order.get(m["severity"], 4), -m["confidence"]))
+        # Rank by evidence: confidence plus a severity bonus, so a well-supported
+        # match outranks a single-symptom emergency hit (AUDIT C-12), while
+        # emergencies with real evidence still rise to the top.
+        matches.sort(key=lambda m: -(m["confidence"] + _SEVERITY_WEIGHT.get(m["severity"], 0)))
 
-        # Determine overall assessment severity
-        if matches:
+        emergency_hits = [m for m in matches if m["severity"] == "EMERGENCY"]
+        confirmed_emergency = [m for m in emergency_hits if m["evidence"] == "strong"]
+        is_emergency = bool(confirmed_emergency)
+        possible_emergency = [
+            {"disease_name": m["disease_name"], "matched": [x["matched_to"] for x in m["matched_symptoms"]],
+             "watch_for": [s for s in json.loads(next(d["symptoms"] for d in all_diseases if d["disease_id"] == m["disease_id"]))
+                           if s.lower() not in {x["matched_to"] for x in m["matched_symptoms"]}][:4]}
+            for m in emergency_hits if m["evidence"] == "weak"
+        ]
+
+        if is_emergency:
+            top_severity = "EMERGENCY"
+        elif matches:
             top_severity = matches[0]["severity"]
         else:
             top_severity = "UNKNOWN"
 
-        # Limit to top 5 matches
+        # Limit to top 3 matches
         top_matches = matches[:3]
 
         return {
@@ -139,8 +164,10 @@ def assess_symptoms(symptoms: list, tool_context: ToolContext) -> dict:
             "overall_severity": top_severity,
             "matches": top_matches,
             "total_matches": len(matches),
-            "is_emergency": top_severity == "EMERGENCY",
-            "emergency_action": "اتصل بالطوارئ فوراً (123)" if top_severity == "EMERGENCY" else None,
+            "is_emergency": is_emergency,
+            "emergency_confidence": round(max(m["confidence"] for m in confirmed_emergency), 1) if confirmed_emergency else None,
+            "possible_emergency": possible_emergency or None,
+            "emergency_action": "اتصل بالطوارئ فوراً (123)" if is_emergency else None,
             "disclaimer": "هذا التقييم للإرشاد فقط وليس تشخيصاً طبياً. استشر طبيبك فوراً."
         }
 
