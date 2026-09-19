@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import copy
 import csv
 import json
 import os
@@ -454,7 +455,12 @@ class AdkSession:
                 "response_type": extract_response_type(result.stages["feature"]["text"]),
             }
             result.parsed_tolerant = _tolerant_parse(result.stages["orchestrator"]["text"], result.stages["feature"]["text"])
-            result.state_snapshot = {k: state.get(k) for k in SNAPSHOT_STATE_KEYS if k in state}
+            # Deep copy: ADK mutates nested state dicts (e.g. user:preferences) in
+            # place across the turns of a scenario, so a shallow snapshot aliases the
+            # live object and every turn of a scenario would serialise the FINAL value.
+            result.state_snapshot = copy.deepcopy(
+                {k: state.get(k) for k in SNAPSHOT_STATE_KEYS if k in state}
+            )
         except Exception:
             result.error = traceback.format_exc(limit=6)
             result.e2e_latency_ms = int((time.perf_counter() - started) * 1000)
