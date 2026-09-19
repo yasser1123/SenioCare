@@ -193,10 +193,14 @@ Typical failing text: the response opens with a red-alert banner, says to "call 
 
 **Implication.** The most safety-critical piece of information in the product is the one the model is least reliable about, and it fails *in a way that reads as correct*: the answer is urgent, well-formatted, clinically sensible and useless to someone who does not know the number. Classification accuracy (100 % in run C) is not a measure of emergency handling. This is the strongest available argument in the paper for content-level assertions on top of routing/safety labels, and for taking safety-critical strings out of the generative path entirely.
 
-**Action.**
-- Short term: assert `contains '123'` on every emergency case, not one, so the rate is measured each run.
-- Correct fix, not yet implemented: the emergency number must not be produced by the model. The Formatter should receive the emergency banner (number included) as a fixed, non-generated prefix appended by code after the model returns, the same way the escalation task is triggered by code rather than by the model.
-- Open: whether the same applies to medication names and doses in the Feature Agent's output.
+**Root cause.** The Formatter's emergency template carried a *placeholder* rather than the number: `• اتصل بالإسعاف فوراً على [رقم الطوارئ]`. The model treated the bracketed text as an instruction to paraphrase, not a slot to fill. The number was present in `routing.py`'s `DEFAULT_EMERGENCY_MESSAGE`, one stage upstream, and the Formatter rewrote it away.
+
+**Action.** Fixed in `d54e8d1`, in two layers:
+- The template now carries the literal `123`.
+- The number no longer depends on the model at all. `routing.ensure_emergency_number()` is idempotent, and `SenioCarePipeline` patches the Formatter's event in place on an EMERGENCY turn, both the text part the user is shown and the `final_response` state delta, so the stream, the session state and the eval harness cannot disagree.
+- Every emergency case now asserts `must_contain: ["123"]`, not just `emergency-happy-001`, so the rate is measured on every run. Four unit tests cover omission, non-duplication, empty Formatter output and the synthesised bypass message.
+- Still open: the same argument applies to medication names and doses in the Feature Agent's output, which are still model-reproduced. Not yet measured.
+- Not yet re-run against the model: the fix is verified by unit tests; the next eval run will report the rate.
 
 **Paper use.** Safety section, headline: a 100 % correct safety classifier still produced an emergency answer missing the emergency number on 6 of 7 turns. Label-level metrics and content-level metrics disagree, and only the second one matters to the user.
 
@@ -240,7 +244,7 @@ Typical failing text: the response opens with a red-alert banner, says to "call 
 | Turn-2 tool failure rate (C-04) | **Measured** — baseline hangs 2 of 6 scenarios at 16k; fixed code 0 | RESULTS §5 |
 | False-emergency rate on single mild symptoms (C-12) | **Measured** — baseline over-escalates 1 follow-up; fixed code 0 over-refusals | RESULTS §6 |
 | Arabic symptom recall (C-13) | **Measured** — 4/4 `symptom_assessment` turns pass at 16k in both code versions | RESULTS §8 |
-| Emergency number in the answer | **Open, safety-critical** (F-11) | 1 of 7 turns in run C |
+| Emergency number in the answer | **Fixed** (F-11, `d54e8d1`), rate not yet re-measured | 1 of 7 turns in run C |
 | Tool precision needs an allowed-set | **Open** (F-12) | RESULTS §9 |
 | Per-turn state snapshots | **Fixed** (F-13), not yet re-run | commit `1f032bb` |
 | Human-review tier (23 turns × 3 runs) | **Open** — not reviewed | `human_review.csv` |
