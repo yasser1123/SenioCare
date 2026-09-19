@@ -5,7 +5,9 @@ import pytest
 from seniocare.routing import (
     DEFAULT_BLOCKED_MESSAGE,
     DEFAULT_EMERGENCY_MESSAGE,
+    EMERGENCY_NUMBER,
     RouteDecision,
+    ensure_emergency_number,
     extract_field,
     route,
 )
@@ -94,3 +96,34 @@ def test_extract_field_stops_at_next_field_or_separator():
     assert extract_field(text, "EMERGENCY_MESSAGE") == "line one\nline two"
     assert extract_field("nothing", "EMERGENCY_MESSAGE") is None
     assert extract_field("BLOCKED_REASON: **bold**\n---", "BLOCKED_REASON") == "bold"
+
+
+# --------------------------------------------------------------------------
+# FINDINGS F-11: the ambulance number must survive a Formatter that omits it
+# --------------------------------------------------------------------------
+
+
+def test_emergency_number_is_appended_when_the_model_omits_it():
+    # The exact failure observed in run C: urgent, correct, no number.
+    text = "\U0001f6a8 \u062a\u0646\u0628\u064a\u0647 \u0637\u0648\u0627\u0631\u0626 \u2014 \u0627\u062a\u0635\u0644 \u0628\u0627\u0644\u0625\u0633\u0639\u0627\u0641 \u0641\u0648\u0631\u0627\u064b"
+    out = ensure_emergency_number(text)
+    assert EMERGENCY_NUMBER in out
+    assert out.startswith(text)
+
+
+def test_emergency_number_is_not_duplicated():
+    text = f"\u0627\u062a\u0635\u0644 \u0639\u0644\u0649 {EMERGENCY_NUMBER} \u062d\u0627\u0644\u0627\u064b"
+    assert ensure_emergency_number(text) == text
+    once = ensure_emergency_number("no number here")
+    assert ensure_emergency_number(once) == once
+    assert once.count(EMERGENCY_NUMBER) == 1
+
+
+def test_emergency_number_handles_empty_output():
+    assert EMERGENCY_NUMBER in ensure_emergency_number("")
+    assert EMERGENCY_NUMBER in ensure_emergency_number(None)
+
+
+def test_default_emergency_message_carries_the_number():
+    assert EMERGENCY_NUMBER in DEFAULT_EMERGENCY_MESSAGE
+    assert EMERGENCY_NUMBER in route("SAFETY_STATUS: EMERGENCY\nINTENT: emergency").feature_result

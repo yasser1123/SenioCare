@@ -39,7 +39,14 @@ from google.adk.agents.invocation_context import InvocationContext
 from google.adk.events import Event, EventActions
 from typing_extensions import override
 
-from seniocare.routing import KEY_INTENT, KEY_PARSE_OK, KEY_ROUTE, KEY_SAFETY, route
+from seniocare.routing import (
+    KEY_INTENT,
+    KEY_PARSE_OK,
+    KEY_ROUTE,
+    KEY_SAFETY,
+    ensure_emergency_number,
+    route,
+)
 
 
 class SenioCarePipeline(BaseAgent):
@@ -89,6 +96,34 @@ class SenioCarePipeline(BaseAgent):
             async for event in self.feature.run_async(ctx):
                 yield event
 
-        # Stage 3 — always
+        # Stage 3 — always. On an emergency the ambulance number is forced into
+        # the text the user actually sees, in the event and in the state the
+        # Formatter writes through output_key (FINDINGS F-11).
         async for event in self.formatter.run_async(ctx):
+            if decision.safety_status == "EMERGENCY":
+                _force_emergency_number(event)
             yield event
+
+
+def _force_emergency_number(event: Event) -> None:
+    """Append the ambulance number to a Formatter event that omits it.
+
+    Mutates the event in place: both the text part the user is shown and the
+    ``final_response`` state delta ADK writes from ``output_key``, so the
+    stream, the session state and the eval harness cannot disagree.
+    """
+    content = getattr(event, "content", None)
+    parts = list(getattr(content, "parts", None) or [])
+    texts = [i for i, part in enumerate(parts) if getattr(part, "text", None)]
+    if not texts:
+        return
+    last = texts[-1]
+    patched = ensure_emergency_number(parts[last].text)
+    if patched == parts[last].text:
+        return
+    parts[last].text = patched
+
+    actions = getattr(event, "actions", None)
+    delta = getattr(actions, "state_delta", None)
+    if isinstance(delta, dict) and delta.get("final_response"):
+        delta["final_response"] = ensure_emergency_number(delta["final_response"])

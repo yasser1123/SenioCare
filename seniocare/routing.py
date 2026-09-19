@@ -24,8 +24,15 @@ _FIELD_RE = {
     for name in ("BLOCKED_REASON", "BLOCKED_MESSAGE", "EMERGENCY_MESSAGE")
 }
 
+# The ambulance number is safety-critical and must never depend on the model
+# reproducing it (FINDINGS F-11: the Formatter dropped it on 6 of 7 emergency
+# turns in run C). It is asserted in code by ensure_emergency_number().
+EMERGENCY_NUMBER = "123"
+EMERGENCY_NUMBER_LINE = f"🚨 اتصل بالإسعاف فوراً على {EMERGENCY_NUMBER}."
+
 DEFAULT_EMERGENCY_MESSAGE = (
-    "اتصل بالإسعاف فوراً على 123. حاول تفضل هادي ومتتحركش كتير، واطلب من حد جنبك يساعدك."
+    f"اتصل بالإسعاف فوراً على {EMERGENCY_NUMBER}. "
+    "حاول تفضل هادي ومتتحركش كتير، واطلب من حد جنبك يساعدك."
 )
 DEFAULT_BLOCKED_REASON = "الطلب خارج نطاق المساعد الصحي"
 DEFAULT_BLOCKED_MESSAGE = (
@@ -78,3 +85,18 @@ def route(orchestrator_output: str) -> RouteDecision:
         return RouteDecision("BLOCKED", "blocked", parse_ok, False,
                              f"RESPONSE_TYPE: blocked\nBLOCKED_REASON: {reason}\nBLOCKED_MESSAGE: {msg}\n")
     return RouteDecision(status or "ALLOWED", intent, parse_ok, True, None)
+
+
+def ensure_emergency_number(text: str) -> str:
+    """Return `text` with the ambulance number guaranteed to appear.
+
+    The Formatter is generative: in run C it produced a correct, urgent,
+    well-structured emergency answer that told the elder to call an ambulance
+    without ever printing the number, on 6 of 7 emergency turns (FINDINGS
+    F-11). A safety-critical literal cannot be left to the model, so the
+    pipeline appends it after the fact when it is missing. Idempotent.
+    """
+    body = text or ""
+    if EMERGENCY_NUMBER in body:
+        return body
+    return (body.rstrip() + "\n\n" + EMERGENCY_NUMBER_LINE).lstrip()
