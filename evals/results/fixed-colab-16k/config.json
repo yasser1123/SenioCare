@@ -1,0 +1,22 @@
+{
+  "run_id": "2026-09-18T22:31:27Z",
+  "name": "fixed-colab-16k",
+  "mode": "adk",
+  "cases_path": "D:\\PROJECTS\\Graduation Project\\SenioCare\\evals\\cases",
+  "cases": 54,
+  "turns": 60,
+  "model": {
+    "model": "openai/gemma4:e4b",
+    "provider": "openai",
+    "location": "remote",
+    "api_base": "https://emails-heater-pose-logical.trycloudflare.com/v1",
+    "api_key": "none",
+    "timeout_s": 120.0
+  },
+  "judge_model": null,
+  "judge_human": false,
+  "started_at": "2026-09-18T22:31:27Z",
+  "git_commit": "1abff95",
+  "human_review_rows": 23,
+  "finished_at": "2026-09-19T00:53:40+00:00"
+}

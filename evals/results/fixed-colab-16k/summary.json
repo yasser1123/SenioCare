@@ -1,0 +1,229 @@
+{
+  "run_id": "2026-09-18T22:31:27Z",
+  "name": "fixed-colab-16k",
+  "turns": 60,
+  "errored": 0,
+  "completed": 60,
+  "assertions": {
+    "passed": 289,
+    "failed": 2,
+    "pending": 68
+  },
+  "case_status": {
+    "pass_pending": 46,
+    "fail": 2,
+    "pending": 3,
+    "pass": 9
+  },
+  "by_category": {
+    "meal": {
+      "total": 8,
+      "pass": 8,
+      "fail": 0,
+      "pending": 0,
+      "error": 0
+    },
+    "exercise": {
+      "total": 3,
+      "pass": 3,
+      "fail": 0,
+      "pending": 0,
+      "error": 0
+    },
+    "symptom_assessment": {
+      "total": 4,
+      "pass": 4,
+      "fail": 0,
+      "pending": 0,
+      "error": 0
+    },
+    "medical_qa": {
+      "total": 4,
+      "pass": 4,
+      "fail": 0,
+      "pending": 0,
+      "error": 0
+    },
+    "emotional": {
+      "total": 2,
+      "pass": 2,
+      "fail": 0,
+      "pending": 0,
+      "error": 0
+    },
+    "routine": {
+      "total": 1,
+      "pass": 1,
+      "fail": 0,
+      "pending": 0,
+      "error": 0
+    },
+    "preference": {
+      "total": 4,
+      "pass": 4,
+      "fail": 0,
+      "pending": 0,
+      "error": 0
+    },
+    "image_medication": {
+      "total": 1,
+      "pass": 1,
+      "fail": 0,
+      "pending": 0,
+      "error": 0
+    },
+    "image_report": {
+      "total": 1,
+      "pass": 1,
+      "fail": 0,
+      "pending": 0,
+      "error": 0
+    },
+    "emergency": {
+      "total": 7,
+      "pass": 6,
+      "fail": 1,
+      "pending": 0,
+      "error": 0
+    },
+    "blocked": {
+      "total": 5,
+      "pass": 5,
+      "fail": 0,
+      "pending": 0,
+      "error": 0
+    },
+    "out_of_scope": {
+      "total": 3,
+      "pass": 3,
+      "fail": 0,
+      "pending": 0,
+      "error": 0
+    },
+    "malformed": {
+      "total": 5,
+      "pass": 2,
+      "fail": 0,
+      "pending": 3,
+      "error": 0
+    },
+    "multiturn": {
+      "total": 12,
+      "pass": 11,
+      "fail": 1,
+      "pending": 0,
+      "error": 0
+    }
+  },
+  "routing": {
+    "cases": 44,
+    "correct": 44,
+    "accuracy": 1.0,
+    "accuracy_tolerant_parser": 1.0
+  },
+  "safety": {
+    "cases": 48,
+    "correct": 48,
+    "accuracy": 1.0,
+    "matrix": {
+      "ALLOWED": {
+        "ALLOWED": 38,
+        "BLOCKED": 0,
+        "EMERGENCY": 0,
+        "unknown": 0
+      },
+      "BLOCKED": {
+        "ALLOWED": 0,
+        "BLOCKED": 4,
+        "EMERGENCY": 0,
+        "unknown": 0
+      },
+      "EMERGENCY": {
+        "ALLOWED": 0,
+        "BLOCKED": 0,
+        "EMERGENCY": 6,
+        "unknown": 0
+      }
+    },
+    "under_escalated": 0,
+    "over_refused": 0
+  },
+  "rates": {
+    "intent_unknown": 0.0,
+    "intent_unknown_n": 0,
+    "safety_unknown": 0.0,
+    "parser_loss_n": 0,
+    "refusal": 0.1,
+    "emergency": 0.1167,
+    "empty_final": 0.0,
+    "empty_feature_when_allowed": 0
+  },
+  "tools": {
+    "precision": 0.4516,
+    "recall": 1.0,
+    "tp": 28,
+    "fp": 34,
+    "fn": 0,
+    "forbidden_calls": 0,
+    "guard_hits_total": 8,
+    "turn2plus_turns": 6,
+    "turn2plus_with_guard_hit": 2,
+    "turn2plus_guard_hit_rate": 0.3333,
+    "latency_p50_ms": {
+      "get_meal_options": 1193,
+      "check_drug_food_interaction": 406,
+      "get_meal_recipe": 416,
+      "search_youtube": 1,
+      "get_exercises": 803,
+      "assess_symptoms": 1487,
+      "search_medical_info": 1,
+      "search_web": 1,
+      "save_user_preference": 1,
+      "store_medical_report": 804
+    }
+  },
+  "truncation": {
+    "max_tokens_hits": {},
+    "llm_calls_by_stage": {
+      "orchestrator_agent": 60,
+      "feature_agent": 124,
+      "formatter_agent": 60
+    },
+    "orchestrator_truncated_rate": 0.0
+  },
+  "latency": {
+    "e2e_p50_ms": 150130,
+    "e2e_p95_ms": 227551,
+    "e2e_max_ms": 264016,
+    "stage_p50_ms": {
+      "orchestrator_agent": 31897,
+      "feature_agent": 21161,
+      "formatter_agent": 52099
+    },
+    "stage_p95_ms": {
+      "orchestrator_agent": 54378,
+      "feature_agent": 65010,
+      "formatter_agent": 68561
+    }
+  },
+  "tokens": {
+    "prompt_per_turn_avg": 22698,
+    "completion_per_turn_avg": 3695,
+    "prompt_per_stage_avg": {
+      "orchestrator_agent": 3996,
+      "feature_agent": 6608,
+      "formatter_agent": 5046
+    }
+  },
+  "cost": {
+    "token_priced_per_turn_avg_usd": 0.016048,
+    "token_priced_total_usd": 0.962864,
+    "compute_per_turn_avg_usd": null
+  },
+  "judge": {
+    "judged": 0,
+    "mean_score": null,
+    "model": null
+  },
+  "human_pending": 23
+}
