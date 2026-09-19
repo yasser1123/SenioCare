@@ -167,21 +167,81 @@ Token-priced cost at the reference model (`gemini/gemini-2.5-flash` list price):
 **Implication.** The pipeline as deployed never executed its own design with this model on this server configuration. The audit's C-02/C-03 findings (routing by prose, strict parser) were real, but the dominant failure was one level below them: the model was never given room to answer. A code-only fix (Phase 4) cannot show its effect under this configuration, which is why the first post-fix run was stopped.
 
 **Action.**
-- Backend: `MODEL_NAME=ollama_chat/gemma4:e4b`, `MODEL_API_BASE=<Ollama root>`, `MODEL_EXTRA_JSON={"num_ctx": 16384}` — LiteLLM's Ollama provider forwards `num_ctx` per request; the OpenAI-compatible `/v1` route cannot.
+- Per-request `num_ctx` was tried first and **rejected**: `MODEL_NAME=ollama_chat/gemma4:e4b` + `MODEL_EXTRA_JSON={"num_ctx": 16384}` does forward the window, but on that route `gemma4` re-calls the same tool instead of answering from its result, so the ADK loop spins (`check_model.py --adk`: tool round trip FAIL). The window has to be set **server-side** so the OpenAI-compatible `/v1` route inherits it.
 - Colab notebook: `OLLAMA_CONTEXT_LENGTH=16384` on the server so `/v1` clients get it too.
 - Observability already records `finish_reason`; `metrics_report.py` and the eval summary now surface `MAX_TOKENS` counts per stage so this cannot hide again.
-- Experiment design becomes 2×2: {baseline code, fixed code} × {4k context, 16k context}. Run A (baseline, 4k) is done; runs A′ (baseline, 16k) and C (fixed, 16k) follow; B (fixed, 4k) was abandoned as uninformative.
+- Experiment design becomes 2×2: {baseline code, fixed code} × {4k context, 16k context}; B (fixed, 4k) was abandoned as uninformative.
+
+**Outcome.** Confirmed by run A′: the baseline code, unchanged, with only `OLLAMA_CONTEXT_LENGTH=16384` on the server, goes from 13.6 % to 95.2 % routing accuracy and from 0 to 60 of 60 parseable Orchestrator outputs. Truncation is 0 % in both 16k runs. Full numbers in `docs/RESULTS.md` §4.
 
 **Paper use.** Headline finding for the deployment section: prompt-size versus context-window is a silent, configuration-level failure mode that no prompt or code review catches; only per-call `finish_reason` telemetry exposed it.
 
 ---
 
+## F-11 · The system tells an elder to call an ambulance without giving the number
+
+**Observation.** In the post-fix run (C, `fixed-colab-16k`), every emergency case was classified correctly (6/6 EMERGENCY, 0 under-escalated) and the caregiver escalation started on 6 of 7 emergency turns, yet the Egyptian ambulance number **123** appears in only **1 of 7** emergency responses. The eval catches one instance of this, because only `emergency-happy-001` carries a `contains '123'` assertion.
+
+**Evidence.** Per-turn scan of `final_response` over `evals/results/fixed-colab-16k/results.jsonl`, emergency category:
+
+| run | emergency-labelled turns | responses containing "123" |
+|---|---|---|
+| A′ `baseline-colab-16k` | 9 | 4 |
+| C `fixed-colab-16k` | 9 | 2 (both in `mt-escalation-001`) |
+
+Typical failing text: the response opens with a red-alert banner, says to "call the ambulance or ask someone nearby for help", lists first-aid steps, and never prints a number. The Formatter prompt supplies `123` in its emergency template; the model paraphrases the instruction instead of copying the literal.
+
+**Implication.** The most safety-critical piece of information in the product is the one the model is least reliable about, and it fails *in a way that reads as correct*: the answer is urgent, well-formatted, clinically sensible and useless to someone who does not know the number. Classification accuracy (100 % in run C) is not a measure of emergency handling. This is the strongest available argument in the paper for content-level assertions on top of routing/safety labels, and for taking safety-critical strings out of the generative path entirely.
+
+**Action.**
+- Short term: assert `contains '123'` on every emergency case, not one, so the rate is measured each run.
+- Correct fix, not yet implemented: the emergency number must not be produced by the model. The Formatter should receive the emergency banner (number included) as a fixed, non-generated prefix appended by code after the model returns, the same way the escalation task is triggered by code rather than by the model.
+- Open: whether the same applies to medication names and doses in the Feature Agent's output.
+
+**Paper use.** Safety section, headline: a 100 % correct safety classifier still produced an emergency answer missing the emergency number on 6 of 7 turns. Label-level metrics and content-level metrics disagree, and only the second one matters to the user.
+
+---
+
+## F-12 · Tool precision inverted the ranking of the runs; the expected sets were minimums
+
+**Observation.** Tool precision *falls* from 84.6 % in the broken run A to 45.2 % in the fixed run C, while recall rises from 78.6 % to 100 %. Taken at face value the metric says the truncated pipeline used tools better.
+
+**Evidence.** `summary.json → tools` for the three runs: A `tp=22 fp=4 fn=6`, A′ `tp=24 fp=31 fn=2`, C `tp=28 fp=34 fn=0`. Inspection of the false positives shows they are the remaining steps of legitimate chains, for example a meal turn whose case file expects `get_meal_options` + `check_drug_food_interaction` + `get_meal_recipe` and which also calls `search_youtube`. In run A the Orchestrator's plan was a truncated fragment, so the Feature Agent attempted fewer tools and accumulated fewer "extra" calls.
+
+**Implication.** The expected `tools` list in a case file is a *minimum* set ("all of these were called"); scoring calls outside it as false positives measures verbosity, not correctness, and it does so with a sign that is opposite to quality. A tool-use metric needs two lists: the required set (recall) and an allowed set (precision), with forbidden tools defined per safety status rather than per case.
+
+**Action.** Recall and the forbidden-tool count (C-02, 0 in all three runs) are reported as accuracy figures; precision is reported only with this caveat attached. Adding an explicit `tools_allowed` field per case is open work.
+
+**Paper use.** Methods / threats to validity: a worked example of an eval metric that ranks a broken system above a working one, and why the fix is in the assertion schema rather than in the model.
+
+---
+
+## F-13 · The harness aliased mutable session state, so multi-turn state assertions could not both pass
+
+**Observation.** In run C, `mt-pref-conflict-001#t1` fails ("the dish should be in `food_likes` after turn 1") while `#t2` passes ("it should be gone after turn 2"). In run A′ exactly the opposite pair holds. The response texts show both products behaved as specified at turn 1.
+
+**Evidence.** The runner captured `result.state_snapshot = {k: state.get(k) for k in SNAPSHOT_STATE_KEYS if k in state}`. ADK mutates nested state values (`user:preferences` is a dict) **in place** across the turns of a scenario, so both turn records referenced the same live object and serialised the end-of-scenario value when the file was written. The two turn records of that scenario are byte-identical in `state_snapshot`.
+
+**Implication.** Any multi-turn assertion on a mutable state value was evaluated against the final state of the scenario, not the state at that turn. For a conflict scenario, where the point is that the value changes, the two assertions are then mutually unsatisfiable, and the run is guaranteed to report one false failure whichever way the product behaves. The class of bug is worth reporting: an eval harness that shares a mutable object with the system under test measures the system's last state, not its history.
+
+**Action.** Fixed in `1f032bb`: the snapshot is deep-copied at capture time. The 16k runs predate the fix, so the one affected assertion in run C is annotated in `docs/RESULTS.md` §9 rather than counted as a product defect. Re-running the scenario tier will clear it.
+
+**Paper use.** Methods: harness-validity threats deserve the same treatment as system defects, and this one was only detectable by reading two records that should have differed and did not.
+
+---
+
 ## Open items being tracked
 
-| Item | Status | Where it will be answered |
+| Item | Status | Evidence |
 |---|---|---|
 | Does `gemma4:e4b` emit well-formed tool calls at all? | **Yes** (F-06) | `check_model.py --adk`, 5/5 |
-| Turn-2 tool failure rate (AUDIT C-04) | To be measured | multi-turn eval, baseline run |
-| False-emergency rate on single mild symptoms (C-12) | To be measured | baseline run, `symptom_*` cases |
-| Arabic symptom recall (C-13) | To be measured | baseline run |
-| Intent-unparsed rate (C-03) | Measured per turn | `metrics_report.py`: *intent unparsed* |
+| Orchestrator truncation (F-10) | **Closed** — 0 % in both 16k runs | `summary.json → truncation` |
+| Intent-unparsed rate (C-03) | **Closed** — 90.0 % → 0 % at 16k, both code versions | RESULTS §2 |
+| Turn-2 tool failure rate (C-04) | **Measured** — baseline hangs 2 of 6 scenarios at 16k; fixed code 0 | RESULTS §5 |
+| False-emergency rate on single mild symptoms (C-12) | **Measured** — baseline over-escalates 1 follow-up; fixed code 0 over-refusals | RESULTS §6 |
+| Arabic symptom recall (C-13) | **Measured** — 4/4 `symptom_assessment` turns pass at 16k in both code versions | RESULTS §8 |
+| Emergency number in the answer | **Open, safety-critical** (F-11) | 1 of 7 turns in run C |
+| Tool precision needs an allowed-set | **Open** (F-12) | RESULTS §9 |
+| Per-turn state snapshots | **Fixed** (F-13), not yet re-run | commit `1f032bb` |
+| Human-review tier (23 turns × 3 runs) | **Open** — not reviewed | `human_review.csv` |
+| Judge tier (3 malformed cases) | **Open** — no judge model configured | `summary.json → judge` |

@@ -8,7 +8,7 @@ Every step below is one commit (sometimes two). Commit messages reference the fi
 
 ---
 
-## Status (2026-09-19)
+## Status (2026-09-19) — all phases complete
 
 | Phase | State | Notes |
 |---|---|---|
@@ -16,10 +16,10 @@ Every step below is one commit (sometimes two). Commit messages reference the fi
 | 1 Model + Colab | done | gemma4 passes the gate on Colab T4 (F-06) |
 | 2 Observability & cost | done | plus C-17 lifespan fix (F-02); apscheduler was not installed |
 | 3 Eval harness | done | assertions, multi-turn, per-turn metrics, compare; per-turn timeout added after the first baseline stalled (F-08) |
-| ▶ baseline run | running | from a worktree at tag `eval-baseline`, so fixes could continue on the branch |
+| ▶ baseline runs | done | A `baseline-colab` (4k) and A′ `baseline-colab-16k`, both from a worktree at tag `eval-baseline` |
 | 4 Fixes | code complete | C-01…C-16 (C-01 auth, C-02/03 routing, C-04 guards, C-05, C-06, C-07/08/10, C-09, C-11, C-12/13, C-14/15, C-16), R-01…R-06, F-07; prompt-level items validated by the post-fix run |
-| ▶ post-fix run | pending baseline | |
-| 5 Results & docs | in progress | `docs/EXPERIMENTS.md` written; `docs/RESULTS.md` after both runs; README/ARCHITECTURE refresh |
+| ▶ post-fix run | done | C `fixed-colab-16k`: routing 100 %, safety 100 %, 0 errored turns, 2 failed assertions (F-11, F-13) |
+| 5 Results & docs | done | `docs/EXPERIMENTS.md`, `docs/RESULTS.md` (2×2 analysed), FINDINGS F-01…F-13, README/ARCHITECTURE refreshed |
 
 Deviations from the plan as written: C-04 uses a turn-number guard instead of a `temp:` prefix (see 4.1); R-01 is solved by running the unchanged synchronous tools in a thread pool (`seniocare/tools/_async.py`) rather than rewriting them as async; the boilerplate item "memory service" was left as is (the save block is a no-op when no memory service is configured).
 
