@@ -73,3 +73,9 @@ def test_orchestrator_no_longer_references_phantom_image_tools():
     text = (Path(__file__).resolve().parents[1] / "seniocare" / "sub_agents" / "orchestrator_agent.py").read_text(encoding="utf-8")
     assert "analyze_medication_image_tool" not in text
     assert "analyze_medical_report_tool" not in text
+
+
+def test_ablation_withholds_the_block(monkeypatch):
+    monkeypatch.setenv("SENIOCARE_PROFILE_IN_PROMPT", "0")
+    block = render_profile_block(STATE)
+    assert "Metformin" not in block and "not shown" in block

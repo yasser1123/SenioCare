@@ -126,3 +126,13 @@ async def test_profile_medicines_pass_without_a_note():
     meds = {"user:user_id": "u", "user:medications": [{"name": "Metformin"}]}
     text, state = await _run(_pipeline(ALLOWED_MEAL, "الأكلة دي آمنة مع الميتفورمين."), "عايز غدا", state=meds)
     assert state["unlisted_medications"] == [] and "ملحوظة" not in text
+
+
+@pytest.mark.asyncio
+async def test_ablation_without_the_safety_layer_behaves_as_before(monkeypatch):
+    """SENIOCARE_SAFETY_LAYER=0: no screen, the Formatter answers the emergency, 123 is appended."""
+    monkeypatch.setenv("SENIOCARE_SAFETY_LAYER", "0")
+    orch = "SAFETY_STATUS: EMERGENCY\nINTENT: emergency\nEMERGENCY_MESSAGE: اهدى"
+    text, state = await _run(_pipeline(orch, "حاول تهدى واتصل بـ 911"), "صدري بيوجعني جامد")
+    assert state["ran"] == ["orchestrator_agent", "formatter_agent"]
+    assert "911" in text and text.rstrip().endswith("123.")

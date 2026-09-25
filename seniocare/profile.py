@@ -14,6 +14,7 @@ Pure: no ADK imports, safe to unit-test.
 
 from __future__ import annotations
 
+import os
 from typing import Any, Iterable, Mapping
 
 KEY_PROFILE_BLOCK = "user_profile_block"
@@ -72,8 +73,16 @@ def addressing_rule(gender: Any) -> str:
     return "unknown: use gender-neutral forms (حضرتك) and avoid gendered verbs"
 
 
+def profile_in_prompt_enabled() -> bool:
+    """SENIOCARE_PROFILE_IN_PROMPT=0 withholds the block from the prompts (the tools still
+    read the profile from state): the pre-F-14 behaviour, for the ablation study."""
+    return os.environ.get("SENIOCARE_PROFILE_IN_PROMPT", "1").strip() != "0"
+
+
 def render_profile_block(state: Mapping[str, Any]) -> str:
     """Render the profile, preferences and remembered facts as a prompt block."""
+    if not profile_in_prompt_enabled():
+        return "PROFILE: not shown in this configuration."
     if not state.get("user:user_id"):
         return (
             "PROFILE: NOT AVAILABLE for this user.\n"

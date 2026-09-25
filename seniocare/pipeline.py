@@ -44,6 +44,7 @@ from google.genai import types
 from typing_extensions import override
 
 import json
+import os
 
 from seniocare import observability as obs
 from seniocare.medcheck import correction_note, unlisted_medications
@@ -53,6 +54,7 @@ from seniocare.routing import (
     KEY_PARSE_OK,
     KEY_ROUTE,
     KEY_SAFETY,
+    ensure_emergency_number,
     route,
 )
 from seniocare.safety import (
@@ -69,6 +71,13 @@ KEY_EMERGENCY_KIND = "emergency_kind"  # self_harm | chest | ... | generic
 KEY_REPLY_SOURCE = "reply_source"      # formatter | template_emergency | template_self_harm | template_missing_image
 KEY_UNLISTED = "unlisted_medications"   # medicines named in the reply but not on the profile
 FINAL_KEY = "final_response"
+
+
+def safety_layer_enabled() -> bool:
+    """SENIOCARE_SAFETY_LAYER=0 turns off the deterministic layer (screen, templates,
+    missing-image guard, sanitiser, medicine correction) for the ablation study; the
+    pipeline then behaves as at commit d54e8d1. Read per turn so an eval run can set it."""
+    return os.environ.get("SENIOCARE_SAFETY_LAYER", "1").strip() != "0"
 
 
 class SenioCarePipeline(BaseAgent):
@@ -92,9 +101,10 @@ class SenioCarePipeline(BaseAgent):
     async def _run_async_impl(self, ctx: InvocationContext) -> AsyncGenerator[Event, None]:
         state = ctx.session.state
         message = _user_text(ctx)
+        layer = safety_layer_enabled()
 
         # Stage 0 — deterministic keyword screen on the user's own words
-        hit = screen(message)
+        hit = screen(message) if layer else None
         if hit:
             obs.emit("safety_screen", screen_kind=hit.kind, matched=hit.matched)
             yield self._state_event(ctx, {
@@ -124,14 +134,14 @@ class SenioCarePipeline(BaseAgent):
         }
 
         # Emergency: fixed reply, no Feature Agent, no Formatter (F-11)
-        if decision.safety_status == "EMERGENCY":
+        if decision.safety_status == "EMERGENCY" and layer:
             delta["feature_result"] = "RESPONSE_TYPE: emergency\n"
             yield self._state_event(ctx, delta)
             yield self._emergency_reply(ctx, category_for(message))
             return
 
         # Image intent without an image: ask for it, never describe it (F-15)
-        if decision.intent in ("image_medication", "image_report") and not _has_image(ctx):
+        if layer and decision.intent in ("image_medication", "image_report") and not _has_image(ctx):
             delta[KEY_ROUTE] = "bypass_missing_image"
             delta["feature_result"] = "RESPONSE_TYPE: missing_image\n"
             yield self._state_event(ctx, delta)
@@ -156,9 +166,12 @@ class SenioCarePipeline(BaseAgent):
         profile_meds = medication_names(state)
         unlisted: list[str] = []
         async for event in self.formatter.run_async(ctx):
-            _sanitise(event)
+            if layer:
+                _sanitise(event)
+            elif decision.safety_status == "EMERGENCY":
+                _force_emergency_number(event)       # the pre-layer behaviour (commit d54e8d1)
             if not getattr(event, "partial", False):
-                unlisted = _check_medications(event, profile_meds, "\n".join(tool_outputs)) or unlisted
+                unlisted = _check_medications(event, profile_meds, "\n".join(tool_outputs), correct=layer) or unlisted
             yield event
         if unlisted:
             obs.emit("unlisted_medication", medications=unlisted, profile=profile_meds)
@@ -232,15 +245,15 @@ def _function_responses(event: Event) -> list[str]:
     return out
 
 
-def _check_medications(event: Event, profile_meds: list[str], tool_text: str) -> list[str]:
+def _check_medications(event: Event, profile_meds: list[str], tool_text: str, correct: bool = True) -> list[str]:
     """Flag medicines in a final Formatter event that the user does not take; append a correction."""
     content = getattr(event, "content", None)
     parts = [p for p in (getattr(content, "parts", None) or []) if getattr(p, "text", None)]
     if not parts:
         return []
     unlisted = unlisted_medications("".join(p.text for p in parts), profile_meds, tool_text)
-    if not unlisted:
-        return []
+    if not unlisted or not correct:
+        return unlisted
     note = correction_note(profile_meds)
     parts[-1].text = parts[-1].text.rstrip() + "\n\n" + note
     delta = getattr(getattr(event, "actions", None), "state_delta", None)
@@ -248,3 +261,13 @@ def _check_medications(event: Event, profile_meds: list[str], tool_text: str) ->
         delta[FINAL_KEY] = delta[FINAL_KEY].rstrip() + "\n\n" + note
     return unlisted
 
+
+def _force_emergency_number(event: Event) -> None:
+    """Append the ambulance number to a Formatter event that omits it (pre-layer behaviour, F-11)."""
+    content = getattr(event, "content", None)
+    parts = [p for p in (getattr(content, "parts", None) or []) if getattr(p, "text", None)]
+    if parts:
+        parts[-1].text = ensure_emergency_number(parts[-1].text)
+    delta = getattr(getattr(event, "actions", None), "state_delta", None)
+    if isinstance(delta, dict) and delta.get(FINAL_KEY):
+        delta[FINAL_KEY] = ensure_emergency_number(delta[FINAL_KEY])
