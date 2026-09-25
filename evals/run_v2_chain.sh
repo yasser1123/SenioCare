@@ -5,7 +5,7 @@
 #   kaggle  F -> E -> D3                           model URL from evals/results/kaggle_api_base.txt
 # Every run uses --resume, so re-running a lane after a tunnel drop continues
 # where it stopped; finished runs (summary.json present) are skipped.
-#   usage: bash evals/run_v2_chain.sh colab|kaggle
+#   usage: bash evals/run_v2_chain.sh colab|kaggle|kaggle2
 set -u
 cd "$(dirname "$0")/.."
 export PYTHONIOENCODING=utf-8 EVAL_TURN_TIMEOUT_S=600 PYTHONUNBUFFERED=1
@@ -20,6 +20,8 @@ run() {  # name, cases, extra env
   local hostenv=(EVAL_GPU_HOST=colab-t4)
   if [ "$LANE" = kaggle ]; then
     hostenv=(EVAL_GPU_HOST=kaggle-t4 "MODEL_API_BASE=$(tr -d ' \r\n' < evals/results/kaggle_api_base.txt)")
+  elif [ "$LANE" = kaggle2 ]; then   # second T4 of the same Kaggle session
+    hostenv=(EVAL_GPU_HOST=kaggle-t4-gpu1 "MODEL_API_BASE=$(tr -d ' \r\n' < evals/results/kaggle2_api_base.txt)")
   fi
   echo "=== $name start $(date -u +%FT%TZ)"
   env "${hostenv[@]}" "$@" $PY evals/runner.py --name "$name" --resume --cases "$cases" > "evals/results/$name.log" 2>&1; local rc=$?
@@ -29,6 +31,8 @@ run() {  # name, cases, extra env
 
 if [ "$LANE" = colab ]; then
   until [ -f evals/results/v2-full-r1/summary.json ]; do sleep 60; done
+  run v2-core-r2 "$CORE"
+elif [ "$LANE" = kaggle2 ]; then   # D2 moved here after Colab's free GPU quota ran out
   run v2-core-r2 "$CORE"
 else
   run v2-noprofile "$C/07_personalization.jsonl,$C/10_memory.jsonl" SENIOCARE_PROFILE_IN_PROMPT=0
