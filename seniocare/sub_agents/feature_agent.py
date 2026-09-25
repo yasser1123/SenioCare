@@ -19,6 +19,7 @@ from seniocare.tools.symptoms import assess_symptoms
 from seniocare.tools.web_search import search_medical_info, search_web, search_youtube
 from seniocare.tools.image_tools import store_medical_report
 from seniocare.tools.preferences import save_user_preference
+from seniocare.tools.memory import remember_fact
 from seniocare.tools._async import threaded
 
 FEATURE_INSTRUCTION = """
@@ -141,6 +142,15 @@ TOOL: save_user_preference
               is_positive (bool) — True=likes, False=dislikes
   Returns: Confirmation with updated preferences
   Use when: User expresses a like/dislike for food, exercise, or activity
+
+TOOL: remember_fact
+  Parameters: fact (str) — one short sentence in the user's words
+              category (str) — "family", "health_history", "routine", "likes", "social", "other"
+  Returns: Confirmation
+  Use when: The TASK_PLAN says REMEMBER, or the user shares a durable personal
+            fact (family, past surgery, daily routine, what they enjoy). Call it
+            in ADDITION to the intent's own tools. Never for medications or
+            conditions (those come from the health profile).
 
 TOOL: search_youtube
   Parameters: query (str), num_results (int), video_duration (str)
@@ -335,6 +345,7 @@ feature_agent = LlmAgent(
         search_youtube,
         store_medical_report,
         save_user_preference,
+        remember_fact,
     ]],
     output_key="feature_result",
 )

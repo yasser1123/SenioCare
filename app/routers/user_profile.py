@@ -7,6 +7,7 @@ from collections import defaultdict
 from fastapi import APIRouter, HTTPException
 
 from app.config import APP_NAME, session_service
+from seniocare.profile import KEY_MEMORY_FACTS
 from app.schemas.profile import (
     UserProfileRequest,
     PartialProfileUpdate,
@@ -107,6 +108,7 @@ async def get_user_profile(user_id: str):
             "caregiver_ids":   session.state.get("user:caregiver_ids"),
             "caregivers":      session.state.get("user:caregivers"),
             "preferences":     session.state.get("user:preferences"),
+            "memory_facts":    session.state.get(KEY_MEMORY_FACTS) or [],
         }
 
         await session_service.delete_session(
@@ -177,6 +179,55 @@ async def sync_user_profile(user_id: str, updates: PartialProfileUpdate):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to sync profile: {e}")
+
+
+# =========================================================================
+# LONG-TERM MEMORY (facts remembered from conversations)
+# =========================================================================
+
+
+async def _read_user_state(user_id: str) -> dict:
+    temp_session_id = f"_memory_read_{uuid.uuid4().hex[:8]}"
+    session = await session_service.create_session(app_name=APP_NAME, user_id=user_id, session_id=temp_session_id)
+    state = dict(session.state)
+    await session_service.delete_session(app_name=APP_NAME, user_id=user_id, session_id=temp_session_id)
+    return state
+
+
+@router.get("/user-memory/{user_id}")
+async def get_user_memory(user_id: str):
+    """Facts the assistant remembered from this user's conversations (newest last)."""
+    try:
+        state = await _read_user_state(user_id)
+        facts = state.get(KEY_MEMORY_FACTS) or []
+        return {"success": True, "user_id": user_id, "count": len(facts), "facts": facts}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read memory: {e}")
+
+
+@router.delete("/user-memory/{user_id}")
+async def delete_user_memory(user_id: str, index: int | None = None):
+    """Forget one remembered fact (by its index in GET /user-memory) or, without an index, all of them."""
+    try:
+        facts = list((await _read_user_state(user_id)).get(KEY_MEMORY_FACTS) or [])
+        if index is None:
+            removed, facts = len(facts), []
+        elif 0 <= index < len(facts):
+            facts.pop(index)
+            removed = 1
+        else:
+            raise HTTPException(status_code=404, detail=f"No fact at index {index}")
+
+        temp_session_id = f"_memory_write_{uuid.uuid4().hex[:8]}"
+        await session_service.create_session(
+            app_name=APP_NAME, user_id=user_id, session_id=temp_session_id, state={KEY_MEMORY_FACTS: facts},
+        )
+        await session_service.delete_session(app_name=APP_NAME, user_id=user_id, session_id=temp_session_id)
+        return {"success": True, "removed": removed, "count": len(facts)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update memory: {e}")
 
 
 # =========================================================================

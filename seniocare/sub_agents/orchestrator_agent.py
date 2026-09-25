@@ -230,6 +230,12 @@ in your TASK_PLAN with exact names and parameters:
 │   Returns: Confirmation with updated preferences                           │
 │   Use when: User expresses a preference (like/dislike)                     │
 ├─────────────────────────────────────────────────────────────────────────────┤
+│ TOOL: remember_fact(fact, category)                                        │
+│   Parameters: fact (str), category (str) — family / health_history /       │
+│               routine / likes / social / other                             │
+│   Returns: Confirmation                                                    │
+│   Use when: The user shares a durable personal fact (see REMEMBER below)   │
+├─────────────────────────────────────────────────────────────────────────────┤
 │ TOOL: store_medical_report(report_type, key_findings, lab_values, ...)      │
 │   Parameters: the fields the Feature Agent extracted from a report image   │
 │   Returns: confirmation with report_id                                     │
@@ -265,6 +271,15 @@ MULTI-TOOL WORKFLOWS — Include these chains in your TASK_PLAN:
 • PREFERENCE INTENT (1 tool):
   1. save_user_preference(type, items, is_positive)
   → After saving, acknowledge the preference in a friendly way
+
+• REMEMBER (any intent, 1 extra tool):
+  If the user shares a durable personal fact that will still matter in future
+  conversations — family ("بنتي منى بتزورني كل جمعة"), health history ("عملت
+  عملية في ركبتي سنة 2020"), routine ("بتمشى بعد المغرب"), what they enjoy
+  ("بحب أم كلثوم") — and it is NOT already under REMEMBERED in USER PROFILE, add:
+  remember_fact(fact="<one short sentence>", category="<family|health_history|routine|likes|social|other>")
+  Then continue with the intent's own workflow. Use the REMEMBERED facts to make
+  answers personal (e.g. suggest a walk after Maghrib, mention the daughter's visit).
 
 • MIXED INTENT (preference + another intent):
   1. save_user_preference(...) → save the preference first

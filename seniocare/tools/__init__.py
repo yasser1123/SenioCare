@@ -7,6 +7,7 @@ from seniocare.tools.symptoms import assess_symptoms
 from seniocare.tools.web_search import search_medical_info, search_web, search_youtube
 from seniocare.tools.image_tools import store_medical_report
 from seniocare.tools.preferences import save_user_preference
+from seniocare.tools.memory import remember_fact
 
 __all__ = [
     "get_meal_options",
@@ -19,4 +20,5 @@ __all__ = [
     "search_youtube",
     "store_medical_report",
     "save_user_preference",
+    "remember_fact",
 ]
