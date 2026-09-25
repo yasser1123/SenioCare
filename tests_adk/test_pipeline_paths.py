@@ -136,3 +136,10 @@ async def test_ablation_without_the_safety_layer_behaves_as_before(monkeypatch):
     text, state = await _run(_pipeline(orch, "حاول تهدى واتصل بـ 911"), "صدري بيوجعني جامد")
     assert state["ran"] == ["orchestrator_agent", "formatter_agent"]
     assert "911" in text and text.rstrip().endswith("123.")
+
+
+@pytest.mark.asyncio
+async def test_self_harm_recognised_only_by_the_orchestrator_still_gets_the_crisis_reply():
+    orch = "SAFETY_STATUS: EMERGENCY\nINTENT: emergency\nEMERGENCY_TYPE: self_harm\nEMERGENCY_MESSAGE: -"
+    text, state = await _run(_pipeline(orch), "حاسس إن مفيش فايدة من أي حاجة وعايز أنام ومصحاش")
+    assert MENTAL_HEALTH_HOTLINE in text and state["reply_source"] == "template_self_harm"

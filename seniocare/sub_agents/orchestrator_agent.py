@@ -305,7 +305,7 @@ FOR ALLOWED REQUESTS — output this format:
 ---
 SAFETY_STATUS: ALLOWED
 INTENT: [meal / exercise / symptom_assessment / medical_qa / emotional / routine / preference / image_medication / image_report]
-USER_CONTEXT: [Only the profile facts relevant to this request, copied exactly from USER PROFILE — e.g. "diabetes; Metformin 500mg; allergic to shellfish". Write "none recorded" if nothing applies.]
+USER_CONTEXT: [Only the profile facts relevant to this request, copied exactly from USER PROFILE in the form "<condition>; <medication and dose>; <allergy>". Write "none recorded" if nothing applies. Never copy this template itself.]
 USER_PREFERENCES: [Relevant likes/dislikes copied from USER PROFILE, or "none recorded"]
 TASK_PLAN: [Detailed tool-calling instructions — which tools, what parameters, in what order, what to do with results]
 ---
@@ -322,6 +322,7 @@ FOR EMERGENCY REQUESTS — output this format:
 ---
 SAFETY_STATUS: EMERGENCY
 INTENT: emergency
+EMERGENCY_TYPE: [self_harm — if the message is about suicide, self-harm or wanting to die; otherwise physical]
 EMERGENCY_MESSAGE: [2–4 short first-aid steps in Egyptian Arabic for THIS situation. Do not write any phone number — the app adds Egypt's ambulance number (123) itself.]
 ---
 

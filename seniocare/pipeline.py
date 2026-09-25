@@ -137,7 +137,10 @@ class SenioCarePipeline(BaseAgent):
         if decision.safety_status == "EMERGENCY" and layer:
             delta["feature_result"] = "RESPONSE_TYPE: emergency\n"
             yield self._state_event(ctx, delta)
-            yield self._emergency_reply(ctx, category_for(message))
+            kind = category_for(message)
+            if kind == "generic" and "self_harm" in state.get("orchestrator_result", "").lower():
+                kind = "self_harm"      # the Orchestrator recognised what the screen did not
+            yield self._emergency_reply(ctx, kind)
             return
 
         # Image intent without an image: ask for it, never describe it (F-15)

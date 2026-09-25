@@ -72,3 +72,14 @@ def test_foreign_numbers_are_replaced_and_egyptian_ones_kept():
     assert strip_foreign_emergency_numbers("اتصل بـ 911 أو 112 أو 997") == "اتصل بـ 123 أو 123 أو 123"
     assert strip_foreign_emergency_numbers("الشرطة 122 والمطافي 180") == "الشرطة 122 والمطافي 180"
     assert strip_foreign_emergency_numbers("1120 سعر حراري و 9110") == "1120 سعر حراري و 9110"
+
+
+@pytest.mark.parametrize("msg", [
+    "بفكر أخلص من حياتي، محدش محتاجني",
+    "ياريتني أموت، بقيت عبء على ولادي",
+    "I don't want to live anymore",
+    "نفسي أموت وأرتاح",
+])
+def test_passive_and_indirect_self_harm_is_screened(msg):
+    hit = screen(msg)
+    assert hit is not None and hit.kind == "self_harm"
