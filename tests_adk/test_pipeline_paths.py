@@ -110,3 +110,19 @@ async def test_formatter_reply_is_sanitised_of_foreign_numbers():
     assert "911" not in text and "123" in text
     assert "911" not in state["final_response"]
     assert state["reply_source"] == "formatter"
+
+
+@pytest.mark.asyncio
+async def test_a_medicine_the_user_does_not_take_is_flagged_and_corrected():
+    meds = {"user:user_id": "u", "user:medications": [{"name": "Metformin", "dose": "500mg"}]}
+    text, state = await _run(_pipeline(ALLOWED_MEAL, "الأكلة دي آمنة مع اللوسارتان."), "عايز غدا", state=meds)
+    assert state["unlisted_medications"] == ["losartan"]
+    assert "الأدوية المسجلة في ملفك هي: Metformin" in text
+    assert "الأدوية المسجلة" in state["final_response"]
+
+
+@pytest.mark.asyncio
+async def test_profile_medicines_pass_without_a_note():
+    meds = {"user:user_id": "u", "user:medications": [{"name": "Metformin"}]}
+    text, state = await _run(_pipeline(ALLOWED_MEAL, "الأكلة دي آمنة مع الميتفورمين."), "عايز غدا", state=meds)
+    assert state["unlisted_medications"] == [] and "ملحوظة" not in text

@@ -1,0 +1,383 @@
+{
+ "_comment": "Medicines common among older adults in Egypt: generic name -> aliases (brands sold in Egypt, Arabic spellings). Used only to DETECT medicine names in replies (seniocare/medcheck.py), never to recommend one. Aliases are lower-case; Arabic is written as normalize_text() produces it (no hamza on alef, final ه for ة).",
+ "metformin": [
+  "glucophage",
+  "cidophage",
+  "metformin",
+  "ميتفورمين",
+  "جلوكوفاج",
+  "سيدوفاج"
+ ],
+ "glimepiride": [
+  "amaryl",
+  "glimepiride",
+  "جليمبيريد",
+  "اماريل"
+ ],
+ "gliclazide": [
+  "diamicron",
+  "gliclazide",
+  "دياميكرون",
+  "جليكلازيد"
+ ],
+ "sitagliptin": [
+  "januvia",
+  "janumet",
+  "sitagliptin",
+  "جانوفيا",
+  "جانوميت",
+  "سيتاجليبتين"
+ ],
+ "vildagliptin": [
+  "galvus",
+  "galvus met",
+  "vildagliptin",
+  "جالفس"
+ ],
+ "empagliflozin": [
+  "jardiance",
+  "empagliflozin",
+  "جارديانس"
+ ],
+ "dapagliflozin": [
+  "forxiga",
+  "dapagliflozin",
+  "فورسيجا"
+ ],
+ "insulin": [
+  "mixtard",
+  "lantus",
+  "novorapid",
+  "ميكستارد",
+  "لانتوس",
+  "نوفورابيد"
+ ],
+ "lisinopril": [
+  "lisinopril",
+  "zestril",
+  "ليزينوبريل",
+  "زستريل"
+ ],
+ "captopril": [
+  "capoten",
+  "captopril",
+  "كابوتين",
+  "كابتوبريل"
+ ],
+ "enalapril": [
+  "enalapril",
+  "renitec",
+  "انالابريل"
+ ],
+ "ramipril": [
+  "tritace",
+  "ramipril",
+  "تريتاس",
+  "راميبريل"
+ ],
+ "perindopril": [
+  "coversyl",
+  "perindopril",
+  "كوفرسيل"
+ ],
+ "losartan": [
+  "cozaar",
+  "losartan",
+  "لوسارتان",
+  "كوزار"
+ ],
+ "valsartan": [
+  "diovan",
+  "tareg",
+  "valsartan",
+  "ديوفان",
+  "تاريج",
+  "فالسارتان"
+ ],
+ "candesartan": [
+  "atacand",
+  "candesartan",
+  "اتاكاند"
+ ],
+ "telmisartan": [
+  "micardis",
+  "telmisartan",
+  "ميكارديس"
+ ],
+ "amlodipine": [
+  "norvasc",
+  "amlodipine",
+  "amlodipin",
+  "نورفاسك",
+  "املوديبين"
+ ],
+ "nifedipine": [
+  "epilat",
+  "adalat",
+  "nifedipine",
+  "ابيلات",
+  "ادالات"
+ ],
+ "bisoprolol": [
+  "concor",
+  "bisoprolol",
+  "كونكور",
+  "بيسوبرولول"
+ ],
+ "atenolol": [
+  "tenormin",
+  "atenolol",
+  "تينورمين",
+  "اتينولول"
+ ],
+ "metoprolol": [
+  "betaloc",
+  "metoprolol",
+  "بيتالوك",
+  "ميتوبرولول"
+ ],
+ "carvedilol": [
+  "dilatrend",
+  "carvedilol",
+  "ديلاتريند",
+  "كارفيديلول"
+ ],
+ "propranolol": [
+  "inderal",
+  "propranolol",
+  "اندرال",
+  "بروبرانولول"
+ ],
+ "furosemide": [
+  "lasix",
+  "furosemide",
+  "لازكس",
+  "لازيكس",
+  "فوروسيميد"
+ ],
+ "hydrochlorothiazide": [
+  "hydrochlorothiazide",
+  "hctz",
+  "moduretic",
+  "هيدروكلوروثيازيد"
+ ],
+ "indapamide": [
+  "natrilix",
+  "indapamide",
+  "ناتريليكس"
+ ],
+ "spironolactone": [
+  "aldactone",
+  "spironolactone",
+  "الداكتون",
+  "سبيرونولاكتون"
+ ],
+ "atorvastatin": [
+  "lipitor",
+  "ator",
+  "atorvastatin",
+  "ليبيتور",
+  "اتور",
+  "اتورفاستاتين"
+ ],
+ "rosuvastatin": [
+  "crestor",
+  "rosuvastatin",
+  "كريستور",
+  "روزوفاستاتين"
+ ],
+ "simvastatin": [
+  "zocor",
+  "simvastatin",
+  "زوكور",
+  "سيمفاستاتين"
+ ],
+ "aspirin": [
+  "aspirin",
+  "aspocid",
+  "jusprin",
+  "rivo",
+  "اسبرين",
+  "اسبوسيد",
+  "جسبرين",
+  "ريفو"
+ ],
+ "clopidogrel": [
+  "plavix",
+  "clopidogrel",
+  "بلافيكس",
+  "كلوبيدوجريل"
+ ],
+ "warfarin": [
+  "warfarin",
+  "marevan",
+  "coumadin",
+  "وارفارين",
+  "ماريفان",
+  "كومادين"
+ ],
+ "rivaroxaban": [
+  "xarelto",
+  "rivaroxaban",
+  "زاريلتو"
+ ],
+ "apixaban": [
+  "eliquis",
+  "apixaban",
+  "اليكويس"
+ ],
+ "digoxin": [
+  "lanoxin",
+  "digoxin",
+  "لانوكسين",
+  "ديجوكسين"
+ ],
+ "isosorbide": [
+  "isosorbide",
+  "isordil",
+  "imdur",
+  "ايزوسوربيد",
+  "ايزورديل"
+ ],
+ "nitroglycerin": [
+  "nitroglycerin",
+  "nitromak",
+  "نيتروجليسرين",
+  "نيتروماك"
+ ],
+ "levothyroxine": [
+  "eltroxin",
+  "euthyrox",
+  "levothyroxine",
+  "التروكسين",
+  "يوثيروكس",
+  "ليفوثيروكسين"
+ ],
+ "omeprazole": [
+  "omeprazole",
+  "gastrazole",
+  "risek",
+  "اوميبرازول",
+  "جاسترازول",
+  "ريسك"
+ ],
+ "esomeprazole": [
+  "nexium",
+  "esomeprazole",
+  "نيكسيوم"
+ ],
+ "pantoprazole": [
+  "controloc",
+  "pantoprazole",
+  "كونترولوك",
+  "بانتوبرازول"
+ ],
+ "paracetamol": [
+  "paracetamol",
+  "acetaminophen",
+  "panadol",
+  "abimol",
+  "cetal",
+  "باراسيتامول",
+  "بنادول",
+  "ابيمول",
+  "سيتال",
+  "اسيتامينوفين"
+ ],
+ "ibuprofen": [
+  "ibuprofen",
+  "brufen",
+  "ايبوبروفين",
+  "بروفين"
+ ],
+ "diclofenac": [
+  "diclofenac",
+  "voltaren",
+  "cataflam",
+  "ديكلوفيناك",
+  "فولتارين",
+  "كتافلام"
+ ],
+ "tramadol": [
+  "tramadol",
+  "tramal",
+  "ترامادول"
+ ],
+ "allopurinol": [
+  "zyloric",
+  "allopurinol",
+  "زيلوريك",
+  "الوبيورينول"
+ ],
+ "prednisolone": [
+  "prednisolone",
+  "solupred",
+  "بريدنيزولون"
+ ],
+ "amoxicillin": [
+  "amoxicillin",
+  "augmentin",
+  "hibiotic",
+  "amoxil",
+  "اموكسيسيلين",
+  "اوجمنتين",
+  "هاي بيوتك"
+ ],
+ "ciprofloxacin": [
+  "ciprofloxacin",
+  "ciprobay",
+  "سيبروفلوكساسين",
+  "سيبروباي"
+ ],
+ "azithromycin": [
+  "azithromycin",
+  "zithromax",
+  "ازيثرومايسين"
+ ],
+ "alendronate": [
+  "fosamax",
+  "alendronate",
+  "فوساماكس"
+ ],
+ "donepezil": [
+  "aricept",
+  "donepezil",
+  "اريسبت",
+  "دونيبيزيل"
+ ],
+ "levodopa": [
+  "levodopa",
+  "sinemet",
+  "ليفودوبا",
+  "سينيميت"
+ ],
+ "sertraline": [
+  "sertraline",
+  "lustral",
+  "zoloft",
+  "سيرترالين",
+  "لوسترال"
+ ],
+ "escitalopram": [
+  "cipralex",
+  "escitalopram",
+  "سيبرالكس"
+ ],
+ "alprazolam": [
+  "xanax",
+  "alprazolam",
+  "زاناكس"
+ ],
+ "tamsulosin": [
+  "omnic",
+  "tamsulosin",
+  "اومنيك",
+  "تامسولوسين"
+ ],
+ "salbutamol": [
+  "ventolin",
+  "salbutamol",
+  "فنتولين",
+  "سالبيوتامول"
+ ]
+}

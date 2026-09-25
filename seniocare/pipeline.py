@@ -43,7 +43,11 @@ from google.adk.events import Event, EventActions
 from google.genai import types
 from typing_extensions import override
 
+import json
+
 from seniocare import observability as obs
+from seniocare.medcheck import correction_note, unlisted_medications
+from seniocare.profile import medication_names
 from seniocare.routing import (
     KEY_INTENT,
     KEY_PARSE_OK,
@@ -63,6 +67,7 @@ from seniocare.safety import (
 KEY_SCREEN = "safety_screen"          # keyword-screen hit kind, or None
 KEY_EMERGENCY_KIND = "emergency_kind"  # self_harm | chest | ... | generic
 KEY_REPLY_SOURCE = "reply_source"      # formatter | template_emergency | template_self_harm | template_missing_image
+KEY_UNLISTED = "unlisted_medications"   # medicines named in the reply but not on the profile
 FINAL_KEY = "final_response"
 
 
@@ -140,15 +145,24 @@ class SenioCarePipeline(BaseAgent):
         yield self._state_event(ctx, delta)
 
         # Stage 2 — only when the request is allowed (or unparseable)
+        tool_outputs: list[str] = []
         if decision.run_feature:
             async for event in self.feature.run_async(ctx):
+                tool_outputs.extend(_function_responses(event))
                 yield event
 
-        # Stage 3 — Formatter; every text it shows is sanitised
+        # Stage 3 — Formatter; every text it shows is sanitised, and the final
+        # text is checked for medicines the user does not take (F-14)
+        profile_meds = medication_names(state)
+        unlisted: list[str] = []
         async for event in self.formatter.run_async(ctx):
             _sanitise(event)
+            if not getattr(event, "partial", False):
+                unlisted = _check_medications(event, profile_meds, "\n".join(tool_outputs)) or unlisted
             yield event
-        yield self._state_event(ctx, {KEY_REPLY_SOURCE: "formatter"})
+        if unlisted:
+            obs.emit("unlisted_medication", medications=unlisted, profile=profile_meds)
+        yield self._state_event(ctx, {KEY_REPLY_SOURCE: "formatter", KEY_UNLISTED: unlisted})
 
     # ------------------------------------------------------------------ helpers
 
@@ -202,3 +216,35 @@ def _sanitise(event: Event) -> None:
     delta = getattr(getattr(event, "actions", None), "state_delta", None)
     if isinstance(delta, dict) and delta.get(FINAL_KEY):
         delta[FINAL_KEY] = strip_foreign_emergency_numbers(delta[FINAL_KEY])
+
+
+def _function_responses(event: Event) -> list[str]:
+    """Tool results carried by an event, as JSON text."""
+    out = []
+    content = getattr(event, "content", None)
+    for part in getattr(content, "parts", None) or []:
+        fr = getattr(part, "function_response", None)
+        if fr is not None:
+            try:
+                out.append(json.dumps(getattr(fr, "response", None), ensure_ascii=False, default=str))
+            except Exception:  # noqa: BLE001
+                out.append(str(getattr(fr, "response", "")))
+    return out
+
+
+def _check_medications(event: Event, profile_meds: list[str], tool_text: str) -> list[str]:
+    """Flag medicines in a final Formatter event that the user does not take; append a correction."""
+    content = getattr(event, "content", None)
+    parts = [p for p in (getattr(content, "parts", None) or []) if getattr(p, "text", None)]
+    if not parts:
+        return []
+    unlisted = unlisted_medications("".join(p.text for p in parts), profile_meds, tool_text)
+    if not unlisted:
+        return []
+    note = correction_note(profile_meds)
+    parts[-1].text = parts[-1].text.rstrip() + "\n\n" + note
+    delta = getattr(getattr(event, "actions", None), "state_delta", None)
+    if isinstance(delta, dict) and delta.get(FINAL_KEY):
+        delta[FINAL_KEY] = delta[FINAL_KEY].rstrip() + "\n\n" + note
+    return unlisted
+
