@@ -212,7 +212,7 @@ Columns are `TEXT` (JSON payloads and timestamps included) except `llm_traces`. 
 
 ### Session database
 
-Managed by ADK's `DatabaseSessionService` (`app/config.py`). The URL is rewritten to add the `+asyncpg` prefix and strip `sslmode` / `channel_binding`. No memory service is configured; cross-session continuity is carried by `user:` state.
+Managed by ADK's `DatabaseSessionService` (`app/config.py`). The URL is rewritten to add the `+asyncpg` prefix and strip `sslmode` / `channel_binding`. No ADK memory service is configured; cross-session continuity is carried by `user:` state: the profile, preferences and `user:memory_facts` (written by the `remember_fact` tool, shown to every stage in the profile block, readable and erasable through `/user-memory/{user_id}`; FINDINGS F-16).
 
 ---
 

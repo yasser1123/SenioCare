@@ -234,6 +234,37 @@ Typical failing text: the response opens with a red-alert banner, says to "call 
 
 ---
 
+## F-14 · The profile reached the tools but never the model; the model invented one
+
+**Observation.** The profile is stored by `/set-user-profile` and every data tool reads it from `user:*` state, but no prompt contained it. The Orchestrator was told to output "USER_CONTEXT: [Full user profile…]" for a profile it could not see.
+**Evidence.** Run C: two replies named Losartan to a user on Metformin and Lisinopril (`meal-malformed-001`, `emotional-happy-001`). Both passed every assertion. A local smoke run in Sept 2026 also showed a small model copying a concrete example from the prompt ("Metformin 500mg; shellfish") into a Lisinopril user's plan.
+**Implication.** Personalisation that exists only inside tools is invisible to the generating model. It fills the gap from priors or from examples in its own prompt.
+**Action.**
+- `seniocare/profile.py` renders the profile, preferences and remembered facts in code, once per turn, into all three prompts as `{user_profile_block}` (5f2bcd3).
+- Prompts contain no concrete medication examples (7c71761).
+- An output check flags any medicine named in a reply that is neither on the profile nor in a tool result. It appends a correction and records `unlisted_medications` (6100aa6).
+**Paper use.** A personalisation claim needs the profile *in the prompt* and a check on the output. Measured by the profile-in-prompt ablation.
+
+## F-15 · Emergency and image replies must not be generated
+
+**Observation.** In run C the emergency label was always right, but 123 appeared in 1 of 7 emergency replies and foreign numbers in 3. Image turns without an image produced confident confabulations.
+**Action (18afe60, 7c71761).**
+- A keyword screen runs before the LLM.
+- Emergency and self-harm replies are fixed templates: 123 first; hotline 16328 for self-harm.
+- An image intent without an image gets "please resend the photo".
+- Foreign emergency numbers are stripped from every reply.
+- The model decides *that* something is an emergency; code decides *what is said*.
+**Evidence so far.** On the original 60 turns the screen matches 7/8 labelled emergencies with 0 false positives. Screen-matched emergencies are answered in about 1 ms, against a median of 80.5 s in run C. On the v2 safety set it matches 7/15 emergencies and self-harm cases, with 0 false positives on 8 look-alikes. The passive self-harm patterns were written after those cases, so that subset is not held out for the screen.
+**Paper use.** A design rule with a measurable effect, via the SAFETY_LAYER ablation.
+
+## F-16 · Long-term memory was configured nowhere
+
+**Observation.** `MEMORY_SERVICE_URI = None`. `auto_save_to_memory` saves only when a memory service exists, and no agent reads memory back. ADK 1.22 offers only in-memory or Vertex AI memory services.
+**Action (55d1994).** Durable facts are stored in `user:memory_facts` by a `remember_fact` tool. `DatabaseSessionService` persists them in Neon, and they are shown to every stage in the profile block. `GET` and `DELETE /user-memory/{user_id}` let the user see and erase them.
+**Paper use.** Memory recall across sessions is measured by `evals/cases/10_memory.jsonl`.
+
+---
+
 ## Open items being tracked
 
 | Item | Status | Evidence |
