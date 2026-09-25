@@ -1,6 +1,5 @@
 {
   "_comment": "User profile fixtures for eval runs. Shape mirrors POST /set-user-profile (app/routers/user_profile.py:43-56) and the pytest fixtures at tests/conftest.py:117-166. Keys are written into ADK session state with the user: prefix by runner.py.",
-
   "diabetic_hypertensive": {
     "user:user_id": "eval_user_dh",
     "user:user_name": "أحمد",
@@ -8,84 +7,392 @@
     "user:weight": 78.0,
     "user:height": 170.0,
     "user:gender": "male",
-    "user:chronicDiseases": ["diabetes", "hypertension"],
-    "user:allergies": ["shellfish"],
+    "user:chronicDiseases": [
+      "diabetes",
+      "hypertension"
+    ],
+    "user:allergies": [
+      "shellfish"
+    ],
     "user:medications": [
-      {"name": "Metformin", "dose": "500mg"},
-      {"name": "Lisinopril", "dose": "10mg"}
+      {
+        "name": "Metformin",
+        "dose": "500mg"
+      },
+      {
+        "name": "Lisinopril",
+        "dose": "10mg"
+      }
     ],
     "user:mobilityStatus": "limited",
     "user:bloodType": "A+",
     "user:caregiver_ids": [],
     "user:caregivers": [],
     "user:preferences": {
-      "food_likes": [], "food_dislikes": [],
-      "exercise_likes": [], "exercise_dislikes": [],
-      "general_likes": [], "general_dislikes": []
+      "food_likes": [],
+      "food_dislikes": [],
+      "exercise_likes": [],
+      "exercise_dislikes": [],
+      "general_likes": [],
+      "general_dislikes": []
     }
   },
-
   "warfarin_user": {
     "user:user_id": "eval_user_warfarin",
     "user:user_name": "سعيد",
     "user:age": 68,
     "user:gender": "male",
-    "user:chronicDiseases": ["heart disease"],
+    "user:chronicDiseases": [
+      "heart disease"
+    ],
     "user:allergies": [],
     "user:medications": [
-      {"name": "Warfarin", "dose": "5mg"},
-      {"name": "Aspirin", "dose": "81mg"},
-      {"name": "Simvastatin", "dose": "20mg"}
+      {
+        "name": "Warfarin",
+        "dose": "5mg"
+      },
+      {
+        "name": "Aspirin",
+        "dose": "81mg"
+      },
+      {
+        "name": "Simvastatin",
+        "dose": "20mg"
+      }
     ],
     "user:mobilityStatus": "moderate",
     "user:caregivers": [],
     "user:preferences": {
-      "food_likes": [], "food_dislikes": [],
-      "exercise_likes": [], "exercise_dislikes": [],
-      "general_likes": [], "general_dislikes": []
+      "food_likes": [],
+      "food_dislikes": [],
+      "exercise_likes": [],
+      "exercise_dislikes": [],
+      "general_likes": [],
+      "general_dislikes": []
     },
     "_probes": "Warfarin/spinach and Warfarin/fish oil are both present in seniocare/data/seeds/drug_food_interactions.json. A meal containing spinach must surface a harmful interaction."
   },
-
   "celiac_dairy": {
     "user:user_id": "eval_user_celiac",
     "user:user_name": "فاطمة",
     "user:age": 70,
     "user:gender": "female",
     "user:chronicDiseases": [],
-    "user:allergies": ["gluten", "dairy"],
+    "user:allergies": [
+      "gluten",
+      "dairy"
+    ],
     "user:medications": [],
     "user:mobilityStatus": "full",
     "user:caregivers": [],
     "user:preferences": {
-      "food_likes": [], "food_dislikes": [],
-      "exercise_likes": [], "exercise_dislikes": [],
-      "general_likes": [], "general_dislikes": []
+      "food_likes": [],
+      "food_dislikes": [],
+      "exercise_likes": [],
+      "exercise_dislikes": [],
+      "general_likes": [],
+      "general_dislikes": []
     },
     "_probes": "AUDIT C-14. Allergen filtering at seniocare/tools/nutrition.py:99 is exact-element matching against a hand-enumerated food_allergens table. Any meal returned must not contain bread, oats, milk, cheese, yogurt, butter, or cottage cheese."
   },
-
   "no_profile": {
     "_probes": "AUDIT C-11. Intentionally empty. seniocare/callbacks.py:86-94 injects the fabricated TEST_USER_PROFILE (72M diabetic/hypertensive on Metformin + Lisinopril) whenever user:user_id is falsy. Assert that the response does NOT reflect diabetes, hypertension, or those medications."
   },
-
   "unmatched_med_name": {
     "user:user_id": "eval_user_unmatched",
     "user:user_name": "منى",
     "user:age": 75,
     "user:gender": "female",
-    "user:chronicDiseases": ["diabetes"],
+    "user:chronicDiseases": [
+      "diabetes"
+    ],
     "user:allergies": [],
     "user:medications": [
-      {"name": "Metformin 500mg", "dose": "500mg"}
+      {
+        "name": "Metformin 500mg",
+        "dose": "500mg"
+      }
     ],
     "user:mobilityStatus": "limited",
     "user:caregivers": [],
     "user:preferences": {
-      "food_likes": [], "food_dislikes": [],
-      "exercise_likes": [], "exercise_dislikes": [],
-      "general_likes": [], "general_dislikes": []
+      "food_likes": [],
+      "food_dislikes": [],
+      "exercise_likes": [],
+      "exercise_dislikes": [],
+      "general_likes": [],
+      "general_dislikes": []
     },
     "_probes": "AUDIT C-14. The drug name carries the dose inline. seniocare/tools/interactions.py:67 requires LOWER(drug_name) = %s exact equality, so this profile should return zero interactions where diabetic_hypertensive returns matches for the same meal. A silent false negative."
+  },
+  "p01_f_diab_htn_limited": {
+    "user:user_id": "eval_p01",
+    "user:user_name": "فاطمة",
+    "user:age": 74,
+    "user:gender": "female",
+    "user:weight": 82.0,
+    "user:height": 158.0,
+    "user:chronicDiseases": [
+      "diabetes",
+      "hypertension"
+    ],
+    "user:allergies": [
+      "nuts"
+    ],
+    "user:medications": [
+      {
+        "name": "Metformin",
+        "dose": "850mg"
+      },
+      {
+        "name": "Amlodipine",
+        "dose": "5mg"
+      }
+    ],
+    "user:mobilityStatus": "limited",
+    "user:caregivers": [],
+    "user:preferences": {
+      "food_likes": [],
+      "food_dislikes": [
+        "fish"
+      ],
+      "exercise_likes": [],
+      "exercise_dislikes": [],
+      "general_likes": [],
+      "general_dislikes": []
+    }
+  },
+  "p02_m_heart_warfarin": {
+    "user:user_id": "eval_p02",
+    "user:user_name": "محمود",
+    "user:age": 69,
+    "user:gender": "male",
+    "user:chronicDiseases": [
+      "heart disease"
+    ],
+    "user:allergies": [],
+    "user:medications": [
+      {
+        "name": "Warfarin",
+        "dose": "5mg"
+      },
+      {
+        "name": "Bisoprolol",
+        "dose": "5mg"
+      },
+      {
+        "name": "Atorvastatin",
+        "dose": "20mg"
+      }
+    ],
+    "user:mobilityStatus": "moderate",
+    "user:caregivers": [],
+    "user:preferences": {
+      "food_likes": [
+        "chicken"
+      ],
+      "food_dislikes": [],
+      "exercise_likes": [],
+      "exercise_dislikes": [],
+      "general_likes": [],
+      "general_dislikes": []
+    }
+  },
+  "p03_f_kidney_htn": {
+    "user:user_id": "eval_p03",
+    "user:user_name": "زينب",
+    "user:age": 71,
+    "user:gender": "female",
+    "user:chronicDiseases": [
+      "kidney disease",
+      "hypertension"
+    ],
+    "user:allergies": [
+      "eggs"
+    ],
+    "user:medications": [
+      {
+        "name": "Furosemide",
+        "dose": "40mg"
+      },
+      {
+        "name": "Amlodipine",
+        "dose": "10mg"
+      }
+    ],
+    "user:mobilityStatus": "limited",
+    "user:caregivers": [],
+    "user:preferences": {
+      "food_likes": [],
+      "food_dislikes": [],
+      "exercise_likes": [],
+      "exercise_dislikes": [],
+      "general_likes": [],
+      "general_dislikes": []
+    }
+  },
+  "p04_m_arthritis": {
+    "user:user_id": "eval_p04",
+    "user:user_name": "حسن",
+    "user:age": 66,
+    "user:gender": "male",
+    "user:chronicDiseases": [
+      "arthritis"
+    ],
+    "user:allergies": [
+      "shellfish"
+    ],
+    "user:medications": [
+      {
+        "name": "Paracetamol",
+        "dose": "500mg when needed"
+      },
+      {
+        "name": "Omeprazole",
+        "dose": "20mg"
+      }
+    ],
+    "user:mobilityStatus": "moderate",
+    "user:caregivers": [],
+    "user:preferences": {
+      "food_likes": [],
+      "food_dislikes": [
+        "foul"
+      ],
+      "exercise_likes": [],
+      "exercise_dislikes": [],
+      "general_likes": [],
+      "general_dislikes": []
+    }
+  },
+  "p05_f_osteo_gluten_dairy": {
+    "user:user_id": "eval_p05",
+    "user:user_name": "سعاد",
+    "user:age": 78,
+    "user:gender": "female",
+    "user:chronicDiseases": [
+      "osteoporosis"
+    ],
+    "user:allergies": [
+      "gluten",
+      "dairy"
+    ],
+    "user:medications": [
+      {
+        "name": "Alendronate",
+        "dose": "70mg weekly"
+      },
+      {
+        "name": "Levothyroxine",
+        "dose": "50mcg"
+      }
+    ],
+    "user:mobilityStatus": "good",
+    "user:caregivers": [],
+    "user:preferences": {
+      "food_likes": [],
+      "food_dislikes": [],
+      "exercise_likes": [],
+      "exercise_dislikes": [],
+      "general_likes": [],
+      "general_dislikes": []
+    }
+  },
+  "p06_m_diab_cipro_fish": {
+    "user:user_id": "eval_p06",
+    "user:user_name": "عبد الله",
+    "user:age": 80,
+    "user:gender": "male",
+    "user:chronicDiseases": [
+      "diabetes"
+    ],
+    "user:allergies": [
+      "fish"
+    ],
+    "user:medications": [
+      {
+        "name": "Metformin",
+        "dose": "500mg"
+      },
+      {
+        "name": "Ciprofloxacin",
+        "dose": "500mg for 7 days"
+      }
+    ],
+    "user:mobilityStatus": "limited",
+    "user:caregivers": [],
+    "user:preferences": {
+      "food_likes": [],
+      "food_dislikes": [],
+      "exercise_likes": [],
+      "exercise_dislikes": [],
+      "general_likes": [],
+      "general_dislikes": []
+    }
+  },
+  "p07_f_htn_lisinopril": {
+    "user:user_id": "eval_p07",
+    "user:user_name": "نادية",
+    "user:age": 67,
+    "user:gender": "female",
+    "user:chronicDiseases": [
+      "hypertension"
+    ],
+    "user:allergies": [],
+    "user:medications": [
+      {
+        "name": "Lisinopril",
+        "dose": "20mg"
+      }
+    ],
+    "user:mobilityStatus": "good",
+    "user:caregivers": [],
+    "user:preferences": {
+      "food_likes": [],
+      "food_dislikes": [
+        "chicken"
+      ],
+      "exercise_likes": [],
+      "exercise_dislikes": [],
+      "general_likes": [],
+      "general_dislikes": []
+    }
+  },
+  "p08_m_heart_diab_dairy": {
+    "user:user_id": "eval_p08",
+    "user:user_name": "إبراهيم",
+    "user:age": 73,
+    "user:gender": "male",
+    "user:chronicDiseases": [
+      "heart disease",
+      "diabetes"
+    ],
+    "user:allergies": [
+      "dairy"
+    ],
+    "user:medications": [
+      {
+        "name": "Simvastatin",
+        "dose": "20mg"
+      },
+      {
+        "name": "Metformin",
+        "dose": "1000mg"
+      },
+      {
+        "name": "Aspirin",
+        "dose": "81mg"
+      }
+    ],
+    "user:mobilityStatus": "moderate",
+    "user:caregivers": [],
+    "user:preferences": {
+      "food_likes": [],
+      "food_dislikes": [],
+      "exercise_likes": [],
+      "exercise_dislikes": [],
+      "general_likes": [],
+      "general_dislikes": []
+    }
   }
 }
