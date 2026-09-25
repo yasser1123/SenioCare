@@ -1288,7 +1288,14 @@ async def main_async(args: argparse.Namespace) -> int:
     elif partial.exists():
         partial.unlink()
     done = len(results)
+    consecutive_errors = 0
     for case in cases:
+        if consecutive_errors >= args.max_consecutive_errors:
+            # The model endpoint is gone (tunnel drop, session ended). Stop without a
+            # summary so the run is not mistaken for finished; --resume continues it.
+            print(f"  ABORT: {consecutive_errors} turns in a row failed with an error; "
+                  f"restore the endpoint and re-run with --resume", flush=True)
+            return 3
         if case.id in finished_cases:
             continue
         if case.is_scenario:
@@ -1310,6 +1317,7 @@ async def main_async(args: argparse.Namespace) -> int:
             status = "ERROR" if r.error else ("FAIL" if False in flags else ("pass" if True in flags else "pending"))
             print(f"[{done}/{n_turns}] {r.case_id:32} {status:7} {r.e2e_latency_ms or 0:>7}ms  "
                   f"safety={r.parsed.get('safety_status')} intent={r.parsed.get('intent')} tools={r.tools_called}", flush=True)
+            consecutive_errors = consecutive_errors + 1 if r.error else 0
 
     summary = write_results(results, cases_by_id, out_dir, run_id, name, config)
     print_summary(summary)
@@ -1329,6 +1337,8 @@ def main() -> int:
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--judge-human", action="store_true", help="run the LLM judge on human-review cases too (triage)")
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--max-consecutive-errors", type=int, default=3,
+                   help="stop the run (no summary) after this many error turns in a row")
     p.add_argument("--resume", action="store_true", help="continue an interrupted run with the same --name")
     args = p.parse_args()
 

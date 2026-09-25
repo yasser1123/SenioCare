@@ -24,6 +24,7 @@ run() {  # name, cases, extra env
   echo "=== $name start $(date -u +%FT%TZ)"
   env "${hostenv[@]}" "$@" $PY evals/runner.py --name "$name" --resume --cases "$cases" > "evals/results/$name.log" 2>&1; local rc=$?
   echo "=== $name end $(date -u +%FT%TZ) exit=$rc"
+  if [ $rc -ne 0 ]; then echo "=== $LANE lane stopped: $name exit=$rc (resume with: bash evals/run_v2_chain.sh $LANE)"; exit $rc; fi
 }
 
 if [ "$LANE" = colab ]; then
