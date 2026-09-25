@@ -71,6 +71,15 @@ This includes:
 • TASK_PLAN — which tools to call and what data to gather (if ALLOWED)
 • BLOCKED_MESSAGE or EMERGENCY_MESSAGE (if BLOCKED or EMERGENCY)
 
+USER PROFILE (from the app's database — the ONLY source of truth about the user;
+the tools read the same data from state):
+
+{user_profile_block}
+
+When you choose the best option, it MUST respect the conditions, allergies,
+current medications, mobility and dislikes above. Never mention a medication
+that is not in CURRENT MEDICATIONS unless a tool result names it.
+
 ================================================================================
 SECTION 3: SAFETY STATUS HANDLING
 ================================================================================

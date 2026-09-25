@@ -12,6 +12,7 @@ from datetime import datetime
 
 from seniocare import observability as obs
 from seniocare.observability import parse_intent, parse_safety_status
+from seniocare.profile import KEY_PROFILE_BLOCK, render_profile_block
 
 # =============================================================================
 # TEST USER (used when no backend has pushed a profile)
@@ -125,6 +126,9 @@ async def populate_user_data(callback_context):
     # Ensure caregivers list exists
     if not state.get("user:caregivers"):
         state["user:caregivers"] = []
+
+    # The profile the prompts see, rendered in code from user:* state
+    state[KEY_PROFILE_BLOCK] = render_profile_block(state)
 
     # Track conversation turns (session-scoped)
     turn_count = state.get("conversation_turn_count", 0)
