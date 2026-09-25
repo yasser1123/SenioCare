@@ -8,49 +8,66 @@ the Orchestrator's ``SAFETY_STATUS``; the only thing keeping the Feature
 Agent (and its ten tools) away from an emergency or a blocked request was
 an instruction in its prompt (docs/AUDIT.md C-02, C-03).
 
-This agent runs the same three stages but decides in code, after the
-Orchestrator, whether the Feature Agent runs at all:
+This agent decides in code what runs and what the user is shown:
 
-    Orchestrator ──► route() ──┬── ALLOWED / unparseable ──► Feature ──► Formatter
-                               └── BLOCKED / EMERGENCY ─────────────────► Formatter
+    message ─► screen() ─ hit ─────────────────────────────► fixed emergency / self-harm reply
+                 │ no hit
+                 ▼
+            Orchestrator ─► route() ─┬─ EMERGENCY ──────────► fixed emergency reply
+                                     ├─ image intent, no image ► "please resend the photo"
+                                     ├─ BLOCKED ─────────────► Formatter (blocked relay)
+                                     └─ ALLOWED / unparseable ► Feature ─► Formatter
 
-On the bypass path the Feature Agent's output is synthesised
-deterministically from the Orchestrator's own BLOCKED_MESSAGE /
-EMERGENCY_MESSAGE in the exact format the Formatter already expects, so the
-Formatter prompt did not change. The decision and the parsed fields are
-written to session state (``safety_status``, ``intent``, ``route``,
-``orchestrator_parse_ok``) for the emergency trigger, the observability
-turn record and the eval harness.
+Safety-critical replies are templates (seniocare/safety.py): the model decides
+*that* a message is an emergency, code decides *what is said*. Every Formatter
+reply passes through strip_foreign_emergency_numbers(). The decision is written
+to session state (``safety_status``, ``intent``, ``route``,
+``orchestrator_parse_ok``, ``safety_screen``, ``reply_source``) for the
+emergency trigger, the observability turn record and the eval harness.
 
-Fail-safe direction: if the Orchestrator's output cannot be parsed at all,
-the request proceeds through the Feature Agent (the user still gets an
-answer) and the turn is flagged ``orchestrator_parse_ok=false``. If either
-signal says emergency (status *or* intent) the bypass is taken.
+Fail-open direction for non-emergencies: if the Orchestrator's output cannot be
+parsed the request proceeds through the Feature Agent and the turn is flagged
+``orchestrator_parse_ok=false``; clear emergencies no longer depend on parsing
+because the screen runs first.
 
 The decision itself lives in seniocare/routing.py (pure, tested).
 """
 
 from __future__ import annotations
 
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 from google.adk.agents import BaseAgent
 from google.adk.agents.invocation_context import InvocationContext
 from google.adk.events import Event, EventActions
+from google.genai import types
 from typing_extensions import override
 
+from seniocare import observability as obs
 from seniocare.routing import (
     KEY_INTENT,
     KEY_PARSE_OK,
     KEY_ROUTE,
     KEY_SAFETY,
-    ensure_emergency_number,
     route,
 )
+from seniocare.safety import (
+    build_emergency_reply,
+    build_missing_image_reply,
+    build_self_harm_reply,
+    category_for,
+    screen,
+    strip_foreign_emergency_numbers,
+)
+
+KEY_SCREEN = "safety_screen"          # keyword-screen hit kind, or None
+KEY_EMERGENCY_KIND = "emergency_kind"  # self_harm | chest | ... | generic
+KEY_REPLY_SOURCE = "reply_source"      # formatter | template_emergency | template_self_harm | template_missing_image
+FINAL_KEY = "final_response"
 
 
 class SenioCarePipeline(BaseAgent):
-    """Orchestrator → (Feature | bypass) → Formatter, decided in code."""
+    """Screen → Orchestrator → (Feature | bypass) → Formatter | fixed reply, decided in code."""
 
     orchestrator: BaseAgent
     feature: BaseAgent
@@ -68,62 +85,120 @@ class SenioCarePipeline(BaseAgent):
 
     @override
     async def _run_async_impl(self, ctx: InvocationContext) -> AsyncGenerator[Event, None]:
-        # Stage 1 — always
+        state = ctx.session.state
+        message = _user_text(ctx)
+
+        # Stage 0 — deterministic keyword screen on the user's own words
+        hit = screen(message)
+        if hit:
+            obs.emit("safety_screen", screen_kind=hit.kind, matched=hit.matched)
+            yield self._state_event(ctx, {
+                KEY_SAFETY: "EMERGENCY", KEY_INTENT: "emergency", KEY_ROUTE: "screen_emergency",
+                KEY_PARSE_OK: None, KEY_SCREEN: hit.kind,
+                "feature_result": "RESPONSE_TYPE: emergency\n",
+                # the emergency report reads orchestrator_result; never leave last turn's there
+                "orchestrator_result": (
+                    f"SAFETY_STATUS: EMERGENCY\nINTENT: emergency\nSCREEN: {hit.kind}\n"
+                    f"USER_MESSAGE: {message[:400]}"
+                ),
+            })
+            yield self._emergency_reply(ctx, hit.kind)
+            return
+
+        # Stage 1 — Orchestrator
         async for event in self.orchestrator.run_async(ctx):
             yield event
 
-        decision = route(ctx.session.state.get("orchestrator_result", ""))
-
-        # Publish the decision. On the bypass path also overwrite feature_result
-        # so the Formatter can never reuse the previous turn's stage-2 output.
+        decision = route(state.get("orchestrator_result", ""))
         delta = {
             KEY_SAFETY: decision.safety_status,
             KEY_INTENT: decision.intent,
             KEY_ROUTE: decision.route,
             KEY_PARSE_OK: decision.parse_ok,
+            KEY_SCREEN: None,
         }
+
+        # Emergency: fixed reply, no Feature Agent, no Formatter (F-11)
+        if decision.safety_status == "EMERGENCY":
+            delta["feature_result"] = "RESPONSE_TYPE: emergency\n"
+            yield self._state_event(ctx, delta)
+            yield self._emergency_reply(ctx, category_for(message))
+            return
+
+        # Image intent without an image: ask for it, never describe it (F-15)
+        if decision.intent in ("image_medication", "image_report") and not _has_image(ctx):
+            delta[KEY_ROUTE] = "bypass_missing_image"
+            delta["feature_result"] = "RESPONSE_TYPE: missing_image\n"
+            yield self._state_event(ctx, delta)
+            yield self._reply(ctx, build_missing_image_reply(decision.intent), "template_missing_image")
+            return
+
+        # On the blocked path overwrite feature_result so the Formatter can never
+        # reuse the previous turn's stage-2 output.
         if not decision.run_feature:
             delta["feature_result"] = decision.feature_result
-        yield Event(
-            invocation_id=ctx.invocation_id,
-            author=self.name,
-            branch=ctx.branch,
-            actions=EventActions(state_delta=delta),
-        )
+        yield self._state_event(ctx, delta)
 
         # Stage 2 — only when the request is allowed (or unparseable)
         if decision.run_feature:
             async for event in self.feature.run_async(ctx):
                 yield event
 
-        # Stage 3 — always. On an emergency the ambulance number is forced into
-        # the text the user actually sees, in the event and in the state the
-        # Formatter writes through output_key (FINDINGS F-11).
+        # Stage 3 — Formatter; every text it shows is sanitised
         async for event in self.formatter.run_async(ctx):
-            if decision.safety_status == "EMERGENCY":
-                _force_emergency_number(event)
+            _sanitise(event)
             yield event
+        yield self._state_event(ctx, {KEY_REPLY_SOURCE: "formatter"})
+
+    # ------------------------------------------------------------------ helpers
+
+    def _state_event(self, ctx: InvocationContext, delta: dict) -> Event:
+        return Event(invocation_id=ctx.invocation_id, author=self.name, branch=ctx.branch,
+                     actions=EventActions(state_delta=delta))
+
+    def _reply(self, ctx: InvocationContext, text: str, source: str, extra: Optional[dict] = None) -> Event:
+        """A user-visible reply produced by code, attributed to the Formatter stage."""
+        return Event(
+            invocation_id=ctx.invocation_id,
+            author=self.formatter.name,
+            branch=ctx.branch,
+            content=types.Content(role="model", parts=[types.Part(text=text)]),
+            actions=EventActions(state_delta={FINAL_KEY: text, KEY_REPLY_SOURCE: source, **(extra or {})}),
+        )
+
+    def _emergency_reply(self, ctx: InvocationContext, kind: str) -> Event:
+        state = ctx.session.state
+        name = state.get("user:user_name")
+        has_caregivers = bool(state.get("user:caregivers"))
+        if kind == "self_harm":
+            text = build_self_harm_reply(name=name, gender=state.get("user:gender"), has_caregivers=has_caregivers)
+            return self._reply(ctx, text, "template_self_harm", {KEY_EMERGENCY_KIND: kind})
+        text = build_emergency_reply(kind, name=name, has_caregivers=has_caregivers)
+        return self._reply(ctx, text, "template_emergency", {KEY_EMERGENCY_KIND: kind})
 
 
-def _force_emergency_number(event: Event) -> None:
-    """Append the ambulance number to a Formatter event that omits it.
+def _user_text(ctx: InvocationContext) -> str:
+    content = getattr(ctx, "user_content", None)
+    parts = getattr(content, "parts", None) or []
+    return " ".join(p.text for p in parts if getattr(p, "text", None))
 
-    Mutates the event in place: both the text part the user is shown and the
-    ``final_response`` state delta ADK writes from ``output_key``, so the
-    stream, the session state and the eval harness cannot disagree.
-    """
+
+def _has_image(ctx: InvocationContext) -> bool:
+    content = getattr(ctx, "user_content", None)
+    for part in getattr(content, "parts", None) or []:
+        blob = getattr(part, "inline_data", None) or getattr(part, "file_data", None)
+        mime = str(getattr(blob, "mime_type", "") or "")
+        if blob is not None and (mime.startswith("image/") or mime == "application/pdf"):
+            return True
+    return False
+
+
+def _sanitise(event: Event) -> None:
+    """Replace emergency numbers that do not work in Egypt, in the text and in final_response."""
     content = getattr(event, "content", None)
-    parts = list(getattr(content, "parts", None) or [])
-    texts = [i for i, part in enumerate(parts) if getattr(part, "text", None)]
-    if not texts:
-        return
-    last = texts[-1]
-    patched = ensure_emergency_number(parts[last].text)
-    if patched == parts[last].text:
-        return
-    parts[last].text = patched
-
-    actions = getattr(event, "actions", None)
-    delta = getattr(actions, "state_delta", None)
-    if isinstance(delta, dict) and delta.get("final_response"):
-        delta["final_response"] = ensure_emergency_number(delta["final_response"])
+    for part in getattr(content, "parts", None) or []:
+        if getattr(part, "text", None):
+            part.text = strip_foreign_emergency_numbers(part.text)
+    delta = getattr(getattr(event, "actions", None), "state_delta", None)
+    if isinstance(delta, dict) and delta.get(FINAL_KEY):
+        delta[FINAL_KEY] = strip_foreign_emergency_numbers(delta[FINAL_KEY])

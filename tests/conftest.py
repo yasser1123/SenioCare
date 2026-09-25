@@ -64,8 +64,17 @@ _mock_adk_events = types.ModuleType("google.adk.events")
 _mock_adk_events.Event = type("Event", (), {"__init__": lambda self, **kw: self.__dict__.update(kw)})
 _mock_adk_events.EventActions = type("EventActions", (), {"__init__": lambda self, **kw: self.__dict__.update(kw)})
 
+# google.genai.types, used by seniocare/pipeline.py to build code-made replies
+_mock_genai = types.ModuleType("google.genai")
+_mock_genai_types = types.ModuleType("google.genai.types")
+for _cls in ("Content", "Part", "Blob"):
+    setattr(_mock_genai_types, _cls, type(_cls, (), {"__init__": lambda self, **kw: self.__dict__.update(kw)}))
+_mock_genai.types = _mock_genai_types
+
 for name, mod in [
     ("google", _mock_google),
+    ("google.genai", _mock_genai),
+    ("google.genai.types", _mock_genai_types),
     ("google.adk", _mock_adk),
     ("google.adk.tools", _mock_adk_tools),
     ("google.adk.agents", _mock_adk_agents),
