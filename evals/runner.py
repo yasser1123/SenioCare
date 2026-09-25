@@ -1266,9 +1266,30 @@ async def main_async(args: argparse.Namespace) -> int:
         else:
             cases_by_id[c.id] = c
 
+    # Checkpoint: every finished turn is appended to partial.jsonl, so a run
+    # that dies (Colab disconnect, tunnel drop) can continue with --resume.
+    out_dir.mkdir(parents=True, exist_ok=True)
+    partial = out_dir / "partial.jsonl"
     results: list[Result] = []
-    done = 0
+    finished_cases: set[str] = set()
+    if args.resume and partial.exists():
+        prior = [Result(**json.loads(line)) for line in partial.read_text(encoding="utf-8").splitlines() if line.strip()]
+        by_case: dict[str, list[Result]] = {}
+        for r in prior:
+            by_case.setdefault(r.scenario_id or r.case_id, []).append(r)
+        for c in cases:   # a case counts as finished only if every one of its turns completed without error
+            got = by_case.get(c.id, [])
+            if got and len(got) == (len(c.turns) if c.is_scenario else 1) and not any(r.error for r in got):
+                finished_cases.add(c.id)
+                results.extend(got)
+        print(f"  resume: {len(finished_cases)} cases already done, {len(results)} turns loaded\n")
+        partial.write_text("".join(json.dumps(asdict(r), ensure_ascii=False) + "\n" for r in results), encoding="utf-8")
+    elif partial.exists():
+        partial.unlink()
+    done = len(results)
     for case in cases:
+        if case.id in finished_cases:
+            continue
         if case.is_scenario:
             turn_results = (await run_scenario_http(case, profiles, run_id, args.base_url) if args.mode == "http"
                             else await run_scenario_adk(case, profiles, run_id))
@@ -1282,6 +1303,8 @@ async def main_async(args: argparse.Namespace) -> int:
                 r.judge = await run_judge(tc, r)
             r.assertions = evaluate(tc, r)
             results.append(r)
+            with partial.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(asdict(r), ensure_ascii=False) + "\n")
             flags = [a["passed"] for a in r.assertions]
             status = "ERROR" if r.error else ("FAIL" if False in flags else ("pass" if True in flags else "pending"))
             print(f"[{done}/{n_turns}] {r.case_id:32} {status:7} {r.e2e_latency_ms or 0:>7}ms  "
@@ -1305,6 +1328,7 @@ def main() -> int:
     p.add_argument("--limit", type=int, default=None)
     p.add_argument("--judge-human", action="store_true", help="run the LLM judge on human-review cases too (triage)")
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--resume", action="store_true", help="continue an interrupted run with the same --name")
     args = p.parse_args()
 
     if sys.platform == "win32":
