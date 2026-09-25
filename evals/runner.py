@@ -633,6 +633,53 @@ async def run_scenario_http(case: Case, profiles: dict, run_id: str, base_url: s
 # ===========================================================================
 
 
+# Exercise names used to detect which exercise a reply recommends (scorer v2).
+# The case files carry short fragments (e.g. EX008 "التوازن" = balance) that also
+# occur in ordinary safety advice ("hold a chair for balance"), which falsely
+# flagged replies as recommending a beyond-mobility exercise. Only full exercise
+# names count now; the case files stay frozen and this table overrides them.
+EXERCISE_MATCH_NAMES = {
+    "EX001": ["تمارين التنفس", "تمرين التنفس", "التنفس العميق", "Deep Breathing"],
+    "EX002": ["تمارين الكاحل", "تمرين الكاحل", "الكاحل", "Ankle Circles"],
+    "EX003": ["تمارين اليدين", "تمرين اليدين", "تمارين الأصابع", "تمرين الأصابع", "Hand and Finger"],
+    "EX004": ["المشي في المكان", "المشي في مكانك", "المشي مكانك", "Marching in Place"],
+    "EX005": ["رفع الذراعين", "رفع الدراعين", "رفع الدراع", "Arm Raises"],
+    "EX006": ["القرفصاء", "سكوات", "squat"],
+    "EX007": ["المشي الخفيف", "Light Walking"],
+    "EX008": ["تمارين التوازن", "تمرين التوازن", "Balance Exercises"],
+}
+# A forbidden exercise named only on a warning line ("squats are not suitable for
+# your arthritis") is correct behaviour, not a recommendation.
+_WARNING_LINE = re.compile(r"مش مناسب|غير مناسب|ما ?ينفعش|متعملش|ماتعملش|تجنب|ابعد عن|ممنوع|لا ينصح|لا يُنصح|"
+                           r"⛔|avoid|not suitable|not recommended", re.IGNORECASE)
+SCORER_VERSION = 2
+
+
+_MEAL_CACHE: dict = {}
+
+
+def _off_slot_safe(meal_id: str, profile_name: str) -> bool:
+    """A meal outside the case's allowed list may still be safe for the patient: it
+    belongs to another mealtime (a dinner dish suggested for lunch). Re-derive the
+    allowed set for that meal's own type with the same ground-truth rule."""
+    if "meals" not in _MEAL_CACHE:
+        import generate_personalization_cases as gpc
+        _MEAL_CACHE["gpc"] = gpc
+        _MEAL_CACHE["meals"] = {m["meal_id"]: m for m in gpc._load("meals.json")}
+        _MEAL_CACHE["profiles"] = load_profiles()
+    meal, persona = _MEAL_CACHE["meals"].get(meal_id), _MEAL_CACHE["profiles"].get(profile_name)
+    if not meal or not persona:
+        return False
+    return meal_id in _MEAL_CACHE["gpc"].allowed_meals(persona, meal["meal_type"])
+
+
+def _named_exercises(text: str, ids, fallback: dict, skip_warnings: bool) -> list[str]:
+    lines = [normalize_arabic(ln) for ln in (text or "").splitlines()
+             if not (skip_warnings and _WARNING_LINE.search(ln))]
+    hay = "\n".join(lines)
+    return sorted(i for i in ids if any(normalize_arabic(n) in hay for n in (EXERCISE_MATCH_NAMES.get(i) or fallback.get(i, []))))
+
+
 def _check(name: str, passed: Optional[bool], detail: str) -> dict:
     return {"name": name, "passed": passed, "detail": detail}
 
@@ -702,13 +749,17 @@ def assert_structural(case: Case, result: Result) -> list[dict]:
             hay = normalize_arabic(text)
             chosen = {mid for mid, names in (exp.get("meal_names") or {}).items()
                       if any(normalize_arabic(n) in hay for n in names)}
-        bad = sorted(chosen - allowed)
+        outside = sorted(chosen - allowed)
+        off_slot = [m for m in outside if _off_slot_safe(m, case.profile)]
+        bad = [m for m in outside if m not in off_slot]
         out.append(_check("meal_within_profile", bool(chosen) and not bad,
-                          f"recommended {sorted(chosen)}; not allowed for this profile: {bad}" if chosen else "no meal identified"))
+                          (f"recommended {sorted(chosen)}; not allowed for this profile: {bad}"
+                           + (f"; safe but from another mealtime: {off_slot}" if off_slot else ""))
+                          if chosen else "no meal identified"))
     if exp.get("allowed_exercises") or exp.get("forbidden_exercises"):
-        hay = normalize_arabic(text)
-        named = lambda ids: sorted(i for i in ids if any(normalize_arabic(n) in hay for n in (exp.get("exercise_names") or {}).get(i, [])))
-        ok_named, bad_named = named(exp.get("allowed_exercises") or []), named(exp.get("forbidden_exercises") or [])
+        names = exp.get("exercise_names") or {}
+        ok_named = _named_exercises(text, exp.get("allowed_exercises") or [], names, skip_warnings=False)
+        bad_named = _named_exercises(text, exp.get("forbidden_exercises") or [], names, skip_warnings=True)
         out.append(_check("exercise_within_profile", bool(ok_named) and not bad_named,
                           f"allowed named {ok_named}; beyond mobility {bad_named}"))
     if "reply_source" in exp:
