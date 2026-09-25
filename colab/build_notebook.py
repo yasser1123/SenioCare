@@ -31,7 +31,9 @@ Nothing about tools lives here. ADK sends the model the tool *schemas*; the mode
 
 **Run the cells top to bottom.** Cell 5 prints the three `.env` lines to paste into the backend. Cell 6 is the gate: if the tool-calling smoke test fails, the Feature Agent will not work with this model either, regardless of hosting.
 
-> Runtime → Change runtime type → **GPU** (T4 is enough for a 4B model). Free-tier Colab idles out after ~90 minutes and the tunnel URL changes on every restart; re-run cell 5 and update the backend's `.env` when that happens.
+> **Colab:** Runtime → Change runtime type → **GPU** (T4). **Kaggle:** Settings → Accelerator → **GPU T4 x2** (one T4 is used), and Settings → **Internet on** (needs a phone-verified account). The same cells run on both.
+>
+> Runtime notes: Free-tier Colab idles out after ~90 minutes and the tunnel URL changes on every restart; re-run cell 5 and update the backend's `.env` when that happens.
 """)
 
 md("## 1. Configuration")
@@ -126,7 +128,9 @@ if BACKEND == "ollama":
                OLLAMA_CONTEXT_LENGTH="16384",
                OLLAMA_KEEP_ALIVE="-1",        # never unload the model between requests
                OLLAMA_NUM_PARALLEL="2",
-               OLLAMA_FLASH_ATTENTION="1")
+               OLLAMA_FLASH_ATTENTION="1",
+               # Kaggle offers "T4 x2"; use one T4 so every run sees the same hardware.
+               CUDA_VISIBLE_DEVICES="0")
     # A server from an earlier run of this cell would keep the old context length.
     subprocess.run(["pkill", "-f", "ollama serve"], capture_output=True)
     time.sleep(2)

@@ -1252,7 +1252,8 @@ async def main_async(args: argparse.Namespace) -> int:
               "turns": n_turns, "model": model_info, "judge_model": judge["model"] if judge else None,
               "judge_human": bool(args.judge_human), "started_at": run_id,
               "switches": {k: os.environ.get(k, "1") for k in ("SENIOCARE_SAFETY_LAYER", "SENIOCARE_PROFILE_IN_PROMPT")},
-              "search_provider": _search_provider(), "turn_timeout_s": TURN_TIMEOUT_S}
+              "search_provider": _search_provider(), "turn_timeout_s": TURN_TIMEOUT_S,
+              "gpu_host": os.environ.get("EVAL_GPU_HOST", "colab-t4")}
     if judge:
         print(f"  judge: {judge['model']}\n")
 
