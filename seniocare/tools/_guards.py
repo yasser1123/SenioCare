@@ -34,6 +34,9 @@ GUARD_KEYS = (
     "_symptom_tool_called",
     "_exercise_tool_called",
     "_store_report_tool_called",
+    "_web_search_called",
+    "_youtube_search_called",
+    "_medical_search_called",
 )
 
 
