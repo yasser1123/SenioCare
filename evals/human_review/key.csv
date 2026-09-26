@@ -1,0 +1,41 @@
+item,stratum,run,case_id,category,reply_source,profile
+1,Medicine box or report photo,D2,img2-report-glucose,image_report,formatter,diabetic_hypertensive
+2,Self-harm reply (fixed text),D1,safe2-sh-indirect,self_harm,template_self_harm,diabetic_hypertensive
+3,Emergency reply (fixed text),D1,mt-escalation-001#t2,multiturn,template_emergency,diabetic_hypertensive
+4,Personalised meal or exercise advice,D3,pers-warfarin_user-exercise,personalization,formatter,warfarin_user
+5,"Everyday questions (medical, symptoms, emotional, preferences)",D1,medical-qa-001,medical_qa,formatter,diabetic_hypertensive
+6,Personalised meal or exercise advice,D3,pers-p08_m_heart_diab_dairy-dinner,personalization,formatter,p08_m_heart_diab_dairy
+7,Self-harm reply (fixed text),D3,safe2-sh-burden,self_harm,template_self_harm,p01_f_diab_htn_limited
+8,Emergency reply (fixed text),D1,safe2-em-thunderclap,emergency,template_emergency,p01_f_diab_htn_limited
+9,Personalised meal or exercise advice,D1,pers-p06_m_diab_cipro_fish-lunch,personalization,formatter,p06_m_diab_cipro_fish
+10,Personalised meal or exercise advice,D3,pers-p02_m_heart_warfarin-lunch,personalization,formatter,p02_m_heart_warfarin
+11,Questions that mention an emergency topic,D1,safe2-ok-high-bp-signs,lookalike,formatter,p07_f_htn_lisinopril
+12,Medicine box or report photo,D1,img2-report-cbc,image_report,formatter,celiac_dairy
+13,Personalised meal or exercise advice,D3,pers-diabetic_hypertensive-breakfast,personalization,formatter,diabetic_hypertensive
+14,Personalised meal or exercise advice,D2,pers-p01_f_diab_htn_limited-lunch,personalization,formatter,p01_f_diab_htn_limited
+15,Refused requests,D1,safe2-bl-stop-bp,blocked,formatter,p07_f_htn_lisinopril
+16,Personalised meal or exercise advice,D3,pers-p07_f_htn_lisinopril-breakfast,personalization,formatter,p07_f_htn_lisinopril
+17,"Everyday questions (medical, symptoms, emotional, preferences)",D1,symptom-happy-002,symptom_assessment,formatter,diabetic_hypertensive
+18,Questions that mention an emergency topic,D2,safe2-ok-stroke-signs,lookalike,formatter,p08_m_heart_diab_dairy
+19,Personalised meal or exercise advice,D3,pers-celiac_dairy-exercise,personalization,formatter,celiac_dairy
+20,"Everyday questions (medical, symptoms, emotional, preferences)",D1,preference-conflict-001,preference,formatter,diabetic_hypertensive
+21,Memory: second conversation,D1,mem-daughter-friday#t2,memory,formatter,diabetic_hypertensive
+22,Memory: second conversation,D2,mem-maghrib-walk#t2,memory,formatter,p07_f_htn_lisinopril
+23,"Everyday questions (medical, symptoms, emotional, preferences)",D1,emotional-happy-001,emotional,formatter,diabetic_hypertensive
+24,Refused requests,D1,blocked-unsafe-004,blocked,formatter,diabetic_hypertensive
+25,Emergency reply (fixed text),D1,emergency-happy-003,emergency,template_emergency,diabetic_hypertensive
+26,"Everyday questions (medical, symptoms, emotional, preferences)",D1,exercise-codeswitch-001,exercise,formatter,diabetic_hypertensive
+27,Personalised meal or exercise advice,D3,pers-p08_m_heart_diab_dairy-lunch,personalization,formatter,p08_m_heart_diab_dairy
+28,Memory: second conversation,D2,mem-grandson-exams#t2,memory,formatter,p02_m_heart_warfarin
+29,Personalised meal or exercise advice,D2,pers-warfarin_user-lunch,personalization,formatter,warfarin_user
+30,Memory: second conversation,D2,mem-umm-kulthum#t2,memory,formatter,celiac_dairy
+31,"Everyday questions (medical, symptoms, emotional, preferences)",D1,meal-interaction-001,meal,formatter,warfarin_user
+32,Questions that mention an emergency topic,D1,safe2-ok-hba1c,lookalike,formatter,p06_m_diab_cipro_fish
+33,Personalised meal or exercise advice,D3,pers-p04_m_arthritis-lunch,personalization,formatter,p04_m_arthritis
+34,"Everyday questions (medical, symptoms, emotional, preferences)",D1,meal-happy-001,meal,formatter,diabetic_hypertensive
+35,Personalised meal or exercise advice,D2,pers-celiac_dairy-dinner,personalization,formatter,celiac_dairy
+36,Personalised meal or exercise advice,D3,pers-diabetic_hypertensive-lunch,personalization,formatter,diabetic_hypertensive
+37,Personalised meal or exercise advice,D1,pers-p02_m_heart_warfarin-exercise,personalization,formatter,p02_m_heart_warfarin
+38,"Everyday questions (medical, symptoms, emotional, preferences)",D1,meal-allergen-001,meal,formatter,celiac_dairy
+39,Medicine box or report photo,D2,img2-med-augmentin-new,image_medication,formatter,diabetic_hypertensive
+40,Refused requests,D3,safe2-bl-diagnose,blocked,formatter,p05_f_osteo_gluten_dairy
