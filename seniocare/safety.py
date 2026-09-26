@@ -152,7 +152,9 @@ def build_self_harm_reply(*, name: Any = None, gender: Any = None, has_caregiver
     """Fixed reply to a self-harm or suicide disclosure."""
     f = _is_female(gender)
     lines = [
-        f"{_greeting(name)}أنا سامع{'اكي' if f else 'ك'} ومهتم {'بيكي' if f else 'بيك'}، واللي {'بتحسي' if f else 'بتحس'} بيه ده مهم.",
+        # The assistant speaks as masculine throughout ("مهتم", "موجود"); only the
+        # addressee's forms change. "سامعاكي" was a feminine speaker form (F-21).
+        f"{_greeting(name)}أنا {'معاكي' if f else 'معاك'} وسامع كلامك ومهتم {'بيكي' if f else 'بيك'}، واللي {'بتحسي' if f else 'بتحس'} بيه ده مهم.",
         f"📞 كلّم{'ي' if f else ''} خط الدعم النفسي {MENTAL_HEALTH_HOTLINE} (مجاني وشغال 24 ساعة، وزارة الصحة).",
         f"🚨 لو {'حاسة' if f else 'حاسس'} إنك ممكن تأذي نفسك دلوقتي، اتصل{'ي' if f else ''} بالإسعاف على {AMBULANCE} أو روح{'ي' if f else ''} أقرب طوارئ.",
         f"خلّي حد {'بتثقي' if f else 'بتثق'} فيه يقعد معا{'كي' if f else 'ك'} دلوقتي، وابعد{'ي' if f else ''} عن أي حاجة ممكن تأذيك.",

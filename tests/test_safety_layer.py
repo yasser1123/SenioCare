@@ -83,3 +83,13 @@ def test_foreign_numbers_are_replaced_and_egyptian_ones_kept():
 def test_passive_and_indirect_self_harm_is_screened(msg):
     hit = screen(msg)
     assert hit is not None and hit.kind == "self_harm"
+
+
+def test_self_harm_reply_speaker_gender_is_consistent():
+    # F-21: the assistant speaks as masculine ("مهتم", "موجود"); "سامعاكي" is a
+    # feminine speaker form and mixed genders in one sentence.
+    from seniocare.safety import build_self_harm_reply
+    female = build_self_harm_reply(name="فاطمة", gender="female")
+    male = build_self_harm_reply(name="أحمد", gender="male")
+    assert "سامعاكي" not in female and "معاكي" in female and "مهتم بيكي" in female
+    assert "معاك " in male and "مهتم بيك" in male
