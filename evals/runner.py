@@ -652,7 +652,7 @@ EXERCISE_MATCH_NAMES = {
 # your arthritis") is correct behaviour, not a recommendation.
 _WARNING_LINE = re.compile(r"مش مناسب|غير مناسب|ما ?ينفعش|متعملش|ماتعملش|تجنب|ابعد عن|ممنوع|لا ينصح|لا يُنصح|"
                            r"⛔|avoid|not suitable|not recommended", re.IGNORECASE)
-SCORER_VERSION = 2
+SCORER_VERSION = 3
 
 
 _MEAL_CACHE: dict = {}
@@ -788,7 +788,10 @@ def _state_check(check: dict, snapshot: dict) -> dict:
     if "contains" in check:
         needle = normalize_arabic(str(check["contains"]))
         hay = [normalize_arabic(str(v)) for v in (value or [])] if isinstance(value, list) else [normalize_arabic(str(value))]
-        ok = any(needle in h for h in hay)
+        # Scorer v3: a stored fact is paraphrased, so "ركبتي" (my knee) is saved as
+        # "الركبه" (the knee). Accept the stem without a final taa/haa/yaa.
+        needles = {needle} | ({needle[:-1]} if len(needle) >= 4 and needle[-1] in "تهي" else set())
+        ok = any(n in h for n in needles for h in hay)
         return _check(f"state:{path} contains {check['contains']}", ok, f"value={value!r}")
     if "not_contains" in check:
         needle = normalize_arabic(str(check["not_contains"]))
