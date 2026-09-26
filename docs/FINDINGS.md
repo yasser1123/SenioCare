@@ -293,6 +293,12 @@ Typical failing text: the response opens with a red-alert banner, says to "call 
 **Action.** Scorer v2 (bd7e8f6) and v3 (4bebe0f). `evals/rescore.py` re-scores saved replies and keeps each earlier results file. Every result in `docs/RESULTS_v2.md` uses scorer v3.
 **Paper use.** A methods point. Automated checks were validated by reading every failed turn, and the check changes were made to the scorer, never to the cases or the system.
 
+## F-21 · The fixed self-harm reply mixed the assistant's own gender
+
+**Observation.** An author read the 40-reply dialect sample (`evals/human_review/key.csv`). The dialect read as natural Egyptian Arabic. One flaw recurred: the self-harm reply to a woman said "أنا سامعاكي ومهتم بيكي". سامعاكي is a feminine speaker form and مهتم a masculine one, so the assistant switched gender mid-sentence. Being template text, it did so in every self-harm reply to a woman.
+**Action (2c66fcc, after the evaluation).** The assistant now speaks as masculine throughout ("أنا معاكي وسامع كلامك ومهتم بيكي"); only the addressee forms change. A regression test covers it.
+**Paper use.** Reported as a qualitative, single-reader check, not a blind rating. The blind two-reviewer protocol (`evals/human_review/`) is prepared and not yet run.
+
 ---
 
 ## Open items being tracked
