@@ -65,6 +65,14 @@ def make_app(mode="firebase"):
     async def reg(body: dict):
         return {"ok": True}
 
+    @app.get("/user-memory/{user_id}")
+    async def mem_get(user_id: str):
+        return {"user_id": user_id}
+
+    @app.delete("/user-memory/{user_id}")
+    async def mem_del(user_id: str):
+        return {"user_id": user_id}
+
     @app.get("/metrics/summary")
     async def metrics():
         return {"ok": True}
@@ -129,6 +137,25 @@ def test_caregiver_registration_requires_matching_caregiver_id():
     body = {"elder_user_id": "elder_1", "caregiver_id": "son_1", "fcm_token": "t"}
     assert c.post("/register-caregiver-fcm", json=body, headers=H("tok-son")).status_code == 200
     assert c.post("/register-caregiver-fcm", json=body, headers=H("tok-stranger")).status_code == 403
+
+
+def test_caregiver_cannot_self_register_for_an_elder_who_did_not_list_them():
+    # stranger_1 signs in as themselves (caregiver_id matches the token) but is not
+    # on elder_1's caregiver_ids, so they must not be able to join the alert list.
+    c = make_app()
+    body = {"elder_user_id": "elder_1", "caregiver_id": "stranger_1", "fcm_token": "t"}
+    assert c.post("/register-caregiver-fcm", json=body, headers=H("tok-stranger")).status_code == 403
+    assert c.post("/register-caregiver-fcm", json={**body, "elder_user_id": "nobody"},
+                  headers=H("tok-stranger")).status_code == 403
+
+
+def test_user_memory_routes_are_per_user():
+    c = make_app()
+    for method in (c.get, c.delete):
+        assert method("/user-memory/elder_1", headers=H("tok-elder")).status_code == 200
+        assert method("/user-memory/elder_1", headers=H("tok-son")).status_code == 200
+        assert method("/user-memory/elder_1", headers=H("tok-stranger")).status_code == 403
+    assert auth.target_user_from_path("/user-memory/elder_1") == "elder_1"
 
 
 def test_admin_paths():

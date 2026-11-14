@@ -226,33 +226,38 @@ def _build_notification_content(
 ) -> tuple[str, str, str]:
     """Build notification title, body, and priority based on report type.
 
+    The body never carries ``report_summary``: a push notification can show on
+    a locked screen, so health details stay in the app behind sign-in and the
+    notification only says that a report is waiting. ``report_summary`` is kept
+    in the signature for callers.
+
     Returns:
         Tuple of (title, body, priority).
         Priority is 'urgent' for emergencies, 'normal' for others.
     """
     if report_type == "emergency":
         title = f"🚨 حالة طوارئ — {elder_name}"
-        body = report_summary or f"تم رصد حالة طوارئ لـ {elder_name}. اطلع على التقرير فوراً."
+        body = f"تم رصد حالة طوارئ لـ {elder_name}. اطلع على التقرير فوراً."
         priority = "urgent"
 
     elif report_type == "daily":
         title = f"📋 تقرير يومي — {elder_name}"
-        body = report_summary or f"التقرير اليومي لـ {elder_name} جاهز. اطلع عليه."
+        body = f"التقرير اليومي لـ {elder_name} جاهز. اطلع عليه."
         priority = "normal"
 
     elif report_type == "weekly":
         title = f"📊 تقرير أسبوعي — {elder_name}"
-        body = report_summary or f"التقرير الأسبوعي لـ {elder_name} جاهز."
+        body = f"التقرير الأسبوعي لـ {elder_name} جاهز."
         priority = "normal"
 
     elif report_type == "monthly":
         title = f"📈 تقرير شهري — {elder_name}"
-        body = report_summary or f"التقرير الشهري لـ {elder_name} جاهز."
+        body = f"التقرير الشهري لـ {elder_name} جاهز."
         priority = "normal"
 
     else:
         title = f"📋 تقرير صحي — {elder_name}"
-        body = report_summary or f"تقرير صحي جديد لـ {elder_name}."
+        body = f"تقرير صحي جديد لـ {elder_name}."
         priority = "normal"
 
     return title, body, priority

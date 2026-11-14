@@ -72,7 +72,7 @@ _ADMIN_RE = re.compile(r"^/apps/[^/]+/(eval|metrics-info)")
 # Routes whose target user is in the path
 _PATH_USER_RES = [
     re.compile(r"^/apps/[^/]+/users/(?P<user_id>[^/]+)"),
-    re.compile(r"^/(?:chat-history|set-user-profile|get-user-profile|sync-user-profile)/(?P<user_id>[^/]+)"),
+    re.compile(r"^/(?:chat-history|set-user-profile|get-user-profile|sync-user-profile|user-memory)/(?P<user_id>[^/]+)"),
     re.compile(r"^/reports/medical/(?P<user_id>[^/]+)$"),
     re.compile(r"^/reports/(?P<user_id>[^/]+)(?:/[^/]+)?$"),
 ]
@@ -197,11 +197,15 @@ async def authorise(uid: str, path: str, target_user: Optional[str], caregiver_s
             raise AuthError(403, "admin only")
         return
     if path == "/register-caregiver-fcm":
-        # A caregiver may register their own device; the elder's allow-list
-        # (caregiver_ids) still decides whether they may read anything.
-        if caregiver_self and uid == caregiver_self:
+        # A caregiver may register only their own device, and only for an older
+        # adult whose allow-list (caregiver_ids) already names them. Registering
+        # puts the device on the alert list, so it must not be open to any
+        # signed-in account (gap found during the paper revision, 2026-11).
+        if not (caregiver_self and uid == caregiver_self):
+            raise AuthError(403, "caregiver_id must match the signed-in user")
+        if target_user and uid in await caregiver_ids_of(target_user):
             return
-        raise AuthError(403, "caregiver_id must match the signed-in user")
+        raise AuthError(403, "not on this user's caregiver list")
     if target_user is None:
         return  # authenticated, no per-user resource (e.g. /run without user_id -> app validates)
     if uid == target_user:
