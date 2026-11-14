@@ -1,0 +1,155 @@
+{
+  "run_id": "2026-09-25T20:10:44Z",
+  "name": "v2-noprofile",
+  "turns": 54,
+  "errored": 0,
+  "completed": 54,
+  "assertions": {
+    "passed": 464,
+    "failed": 53,
+    "pending": 44
+  },
+  "case_status": {
+    "fail": 47,
+    "pass_pending": 2,
+    "pass": 5
+  },
+  "by_category": {
+    "personalization": {
+      "total": 44,
+      "pass": 2,
+      "fail": 42,
+      "pending": 0,
+      "error": 0
+    },
+    "memory": {
+      "total": 10,
+      "pass": 5,
+      "fail": 5,
+      "pending": 0,
+      "error": 0
+    }
+  },
+  "routing": {
+    "cases": 47,
+    "correct": 47,
+    "accuracy": 1.0,
+    "accuracy_tolerant_parser": 1.0
+  },
+  "safety": {
+    "cases": 54,
+    "correct": 54,
+    "accuracy": 1.0,
+    "matrix": {
+      "ALLOWED": {
+        "ALLOWED": 54,
+        "BLOCKED": 0,
+        "EMERGENCY": 0,
+        "unknown": 0
+      },
+      "BLOCKED": {
+        "ALLOWED": 0,
+        "BLOCKED": 0,
+        "EMERGENCY": 0,
+        "unknown": 0
+      },
+      "EMERGENCY": {
+        "ALLOWED": 0,
+        "BLOCKED": 0,
+        "EMERGENCY": 0,
+        "unknown": 0
+      }
+    },
+    "under_escalated": 0,
+    "over_refused": 0
+  },
+  "content_safety": {
+    "emergency_replies": 0,
+    "number_present": 0,
+    "number_in_first_line": 0,
+    "foreign_number_in_emergency_reply": 0,
+    "foreign_number_any_reply": 0,
+    "screen_hits": 0,
+    "screen_hits_on_expected_emergency": 0,
+    "template_replies": 0,
+    "turns_with_unlisted_medication": 0,
+    "emergency_e2e_p50_ms": null
+  },
+  "rates": {
+    "intent_unknown": 0.0,
+    "intent_unknown_n": 0,
+    "safety_unknown": 0.0,
+    "parser_loss_n": 0,
+    "refusal": 0.0,
+    "emergency": 0.0,
+    "empty_final": 0.0,
+    "empty_feature_when_allowed": 0
+  },
+  "tools": {
+    "precision": 0.5,
+    "recall": 1.0,
+    "tp": 77,
+    "fp": 77,
+    "fn": 0,
+    "forbidden_calls": 0,
+    "guard_hits_total": 4,
+    "turn2plus_turns": 5,
+    "turn2plus_with_guard_hit": 1,
+    "turn2plus_guard_hit_rate": 0.2,
+    "latency_p50_ms": {
+      "get_meal_options": 1430,
+      "check_drug_food_interaction": 466,
+      "get_meal_recipe": 445,
+      "search_youtube": 2769,
+      "get_exercises": 889,
+      "remember_fact": 6,
+      "save_user_preference": 2,
+      "search_web": 1821,
+      "search_medical_info": 3236
+    }
+  },
+  "truncation": {
+    "max_tokens_hits": {},
+    "llm_calls_by_stage": {
+      "orchestrator_agent": 54,
+      "feature_agent": 197,
+      "formatter_agent": 54
+    },
+    "orchestrator_truncated_rate": 0.0
+  },
+  "latency": {
+    "e2e_p50_ms": 139295,
+    "e2e_p95_ms": 166618,
+    "e2e_max_ms": 185976,
+    "stage_p50_ms": {
+      "orchestrator_agent": 18265,
+      "feature_agent": 13233,
+      "formatter_agent": 40506
+    },
+    "stage_p95_ms": {
+      "orchestrator_agent": 25406,
+      "feature_agent": 43248,
+      "formatter_agent": 49061
+    }
+  },
+  "tokens": {
+    "prompt_per_turn_avg": 34193,
+    "completion_per_turn_avg": 4928,
+    "prompt_per_stage_avg": {
+      "orchestrator_agent": 4108,
+      "feature_agent": 6538,
+      "formatter_agent": 6233
+    }
+  },
+  "cost": {
+    "token_priced_per_turn_avg_usd": 0.022577,
+    "token_priced_total_usd": 1.219141,
+    "compute_per_turn_avg_usd": null
+  },
+  "judge": {
+    "judged": 0,
+    "mean_score": null,
+    "model": null
+  },
+  "human_pending": 0
+}

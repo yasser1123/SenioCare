@@ -1,0 +1,1063 @@
+{
+  "runs": {
+    "D1": "v2-full-r1",
+    "F": "v2-noprofile",
+    "E": "v2-nolayer",
+    "D2": "v2-core-r2",
+    "D3": "v2-core-r3"
+  },
+  "per_run": {
+    "D1": {
+      "arabic_script": {
+        "k": 87,
+        "n": 89,
+        "rate": 0.978,
+        "ci95": [
+          0.921,
+          0.997
+        ]
+      },
+      "completed": {
+        "k": 153,
+        "n": 153,
+        "rate": 1.0,
+        "ci95": [
+          0.976,
+          1.0
+        ]
+      },
+      "condition_aware": {
+        "k": 40,
+        "n": 40,
+        "rate": 1.0,
+        "ci95": [
+          0.912,
+          1.0
+        ]
+      },
+      "crisis_line_16328": {
+        "k": 5,
+        "n": 5,
+        "rate": 1.0,
+        "ci95": [
+          0.478,
+          1.0
+        ]
+      },
+      "exercise_within_profile": {
+        "k": 10,
+        "n": 11,
+        "rate": 0.909,
+        "ci95": [
+          0.587,
+          0.998
+        ]
+      },
+      "meal_safe_for_profile": {
+        "k": 33,
+        "n": 33,
+        "rate": 1.0,
+        "ci95": [
+          0.894,
+          1.0
+        ]
+      },
+      "memory_recall": {
+        "k": 3,
+        "n": 5,
+        "rate": 0.6,
+        "ci95": [
+          0.147,
+          0.947
+        ]
+      },
+      "memory_saved": {
+        "k": 4,
+        "n": 5,
+        "rate": 0.8,
+        "ci95": [
+          0.284,
+          0.995
+        ]
+      },
+      "no_forbidden_tool": {
+        "k": 12,
+        "n": 13,
+        "rate": 0.923,
+        "ci95": [
+          0.64,
+          0.998
+        ]
+      },
+      "no_foreign_number": {
+        "k": 66,
+        "n": 66,
+        "rate": 1.0,
+        "ci95": [
+          0.946,
+          1.0
+        ]
+      },
+      "no_unlisted_medication": {
+        "k": 49,
+        "n": 49,
+        "rate": 1.0,
+        "ci95": [
+          0.927,
+          1.0
+        ]
+      },
+      "number_123_first": {
+        "k": 10,
+        "n": 10,
+        "rate": 1.0,
+        "ci95": [
+          0.692,
+          1.0
+        ]
+      },
+      "routing_correct": {
+        "k": 99,
+        "n": 99,
+        "rate": 1.0,
+        "ci95": [
+          0.963,
+          1.0
+        ]
+      },
+      "safety_correct": {
+        "k": 138,
+        "n": 138,
+        "rate": 1.0,
+        "ci95": [
+          0.974,
+          1.0
+        ]
+      },
+      "turn_all_checks_pass": {
+        "k": 134,
+        "n": 150,
+        "rate": 0.893,
+        "ci95": [
+          0.833,
+          0.938
+        ]
+      },
+      "uses_name": {
+        "k": 35,
+        "n": 44,
+        "rate": 0.795,
+        "ci95": [
+          0.647,
+          0.902
+        ]
+      }
+    },
+    "F": {
+      "arabic_script": {
+        "k": 42,
+        "n": 44,
+        "rate": 0.955,
+        "ci95": [
+          0.845,
+          0.994
+        ]
+      },
+      "completed": {
+        "k": 54,
+        "n": 54,
+        "rate": 1.0,
+        "ci95": [
+          0.934,
+          1.0
+        ]
+      },
+      "condition_aware": {
+        "k": 38,
+        "n": 40,
+        "rate": 0.95,
+        "ci95": [
+          0.831,
+          0.994
+        ]
+      },
+      "exercise_within_profile": {
+        "k": 10,
+        "n": 11,
+        "rate": 0.909,
+        "ci95": [
+          0.587,
+          0.998
+        ]
+      },
+      "meal_safe_for_profile": {
+        "k": 31,
+        "n": 33,
+        "rate": 0.939,
+        "ci95": [
+          0.798,
+          0.993
+        ]
+      },
+      "memory_recall": {
+        "k": 1,
+        "n": 5,
+        "rate": 0.2,
+        "ci95": [
+          0.005,
+          0.716
+        ]
+      },
+      "memory_saved": {
+        "k": 4,
+        "n": 5,
+        "rate": 0.8,
+        "ci95": [
+          0.284,
+          0.995
+        ]
+      },
+      "no_foreign_number": {
+        "k": 44,
+        "n": 44,
+        "rate": 1.0,
+        "ci95": [
+          0.92,
+          1.0
+        ]
+      },
+      "no_unlisted_medication": {
+        "k": 44,
+        "n": 44,
+        "rate": 1.0,
+        "ci95": [
+          0.92,
+          1.0
+        ]
+      },
+      "routing_correct": {
+        "k": 47,
+        "n": 47,
+        "rate": 1.0,
+        "ci95": [
+          0.925,
+          1.0
+        ]
+      },
+      "safety_correct": {
+        "k": 54,
+        "n": 54,
+        "rate": 1.0,
+        "ci95": [
+          0.934,
+          1.0
+        ]
+      },
+      "turn_all_checks_pass": {
+        "k": 7,
+        "n": 54,
+        "rate": 0.13,
+        "ci95": [
+          0.054,
+          0.249
+        ]
+      },
+      "uses_name": {
+        "k": 3,
+        "n": 44,
+        "rate": 0.068,
+        "ci95": [
+          0.014,
+          0.187
+        ]
+      }
+    },
+    "E": {
+      "arabic_script": {
+        "k": 7,
+        "n": 7,
+        "rate": 1.0,
+        "ci95": [
+          0.59,
+          1.0
+        ]
+      },
+      "completed": {
+        "k": 46,
+        "n": 46,
+        "rate": 1.0,
+        "ci95": [
+          0.923,
+          1.0
+        ]
+      },
+      "crisis_line_16328": {
+        "k": 0,
+        "n": 5,
+        "rate": 0.0,
+        "ci95": [
+          0.0,
+          0.522
+        ]
+      },
+      "no_forbidden_tool": {
+        "k": 5,
+        "n": 6,
+        "rate": 0.833,
+        "ci95": [
+          0.359,
+          0.996
+        ]
+      },
+      "no_foreign_number": {
+        "k": 20,
+        "n": 21,
+        "rate": 0.952,
+        "ci95": [
+          0.762,
+          0.999
+        ]
+      },
+      "no_unlisted_medication": {
+        "k": 5,
+        "n": 5,
+        "rate": 1.0,
+        "ci95": [
+          0.478,
+          1.0
+        ]
+      },
+      "number_123_first": {
+        "k": 0,
+        "n": 10,
+        "rate": 0.0,
+        "ci95": [
+          0.0,
+          0.308
+        ]
+      },
+      "routing_correct": {
+        "k": 13,
+        "n": 13,
+        "rate": 1.0,
+        "ci95": [
+          0.753,
+          1.0
+        ]
+      },
+      "safety_correct": {
+        "k": 41,
+        "n": 41,
+        "rate": 1.0,
+        "ci95": [
+          0.914,
+          1.0
+        ]
+      },
+      "turn_all_checks_pass": {
+        "k": 28,
+        "n": 46,
+        "rate": 0.609,
+        "ci95": [
+          0.454,
+          0.749
+        ]
+      }
+    },
+    "D2": {
+      "arabic_script": {
+        "k": 42,
+        "n": 44,
+        "rate": 0.955,
+        "ci95": [
+          0.845,
+          0.994
+        ]
+      },
+      "completed": {
+        "k": 93,
+        "n": 93,
+        "rate": 1.0,
+        "ci95": [
+          0.961,
+          1.0
+        ]
+      },
+      "condition_aware": {
+        "k": 40,
+        "n": 40,
+        "rate": 1.0,
+        "ci95": [
+          0.912,
+          1.0
+        ]
+      },
+      "crisis_line_16328": {
+        "k": 5,
+        "n": 5,
+        "rate": 1.0,
+        "ci95": [
+          0.478,
+          1.0
+        ]
+      },
+      "exercise_within_profile": {
+        "k": 11,
+        "n": 11,
+        "rate": 1.0,
+        "ci95": [
+          0.715,
+          1.0
+        ]
+      },
+      "meal_safe_for_profile": {
+        "k": 33,
+        "n": 33,
+        "rate": 1.0,
+        "ci95": [
+          0.894,
+          1.0
+        ]
+      },
+      "memory_recall": {
+        "k": 4,
+        "n": 5,
+        "rate": 0.8,
+        "ci95": [
+          0.284,
+          0.995
+        ]
+      },
+      "memory_saved": {
+        "k": 4,
+        "n": 5,
+        "rate": 0.8,
+        "ci95": [
+          0.284,
+          0.995
+        ]
+      },
+      "no_forbidden_tool": {
+        "k": 3,
+        "n": 3,
+        "rate": 1.0,
+        "ci95": [
+          0.292,
+          1.0
+        ]
+      },
+      "no_foreign_number": {
+        "k": 60,
+        "n": 60,
+        "rate": 1.0,
+        "ci95": [
+          0.94,
+          1.0
+        ]
+      },
+      "no_unlisted_medication": {
+        "k": 49,
+        "n": 49,
+        "rate": 1.0,
+        "ci95": [
+          0.927,
+          1.0
+        ]
+      },
+      "number_123_first": {
+        "k": 9,
+        "n": 10,
+        "rate": 0.9,
+        "ci95": [
+          0.555,
+          0.997
+        ]
+      },
+      "routing_correct": {
+        "k": 54,
+        "n": 55,
+        "rate": 0.982,
+        "ci95": [
+          0.903,
+          1.0
+        ]
+      },
+      "safety_correct": {
+        "k": 88,
+        "n": 90,
+        "rate": 0.978,
+        "ci95": [
+          0.922,
+          0.997
+        ]
+      },
+      "turn_all_checks_pass": {
+        "k": 72,
+        "n": 93,
+        "rate": 0.774,
+        "ci95": [
+          0.676,
+          0.854
+        ]
+      },
+      "uses_name": {
+        "k": 31,
+        "n": 44,
+        "rate": 0.705,
+        "ci95": [
+          0.548,
+          0.832
+        ]
+      }
+    },
+    "D3": {
+      "arabic_script": {
+        "k": 41,
+        "n": 44,
+        "rate": 0.932,
+        "ci95": [
+          0.813,
+          0.986
+        ]
+      },
+      "completed": {
+        "k": 93,
+        "n": 93,
+        "rate": 1.0,
+        "ci95": [
+          0.961,
+          1.0
+        ]
+      },
+      "condition_aware": {
+        "k": 39,
+        "n": 40,
+        "rate": 0.975,
+        "ci95": [
+          0.868,
+          0.999
+        ]
+      },
+      "crisis_line_16328": {
+        "k": 5,
+        "n": 5,
+        "rate": 1.0,
+        "ci95": [
+          0.478,
+          1.0
+        ]
+      },
+      "exercise_within_profile": {
+        "k": 11,
+        "n": 11,
+        "rate": 1.0,
+        "ci95": [
+          0.715,
+          1.0
+        ]
+      },
+      "meal_safe_for_profile": {
+        "k": 32,
+        "n": 33,
+        "rate": 0.97,
+        "ci95": [
+          0.842,
+          0.999
+        ]
+      },
+      "memory_recall": {
+        "k": 4,
+        "n": 5,
+        "rate": 0.8,
+        "ci95": [
+          0.284,
+          0.995
+        ]
+      },
+      "memory_saved": {
+        "k": 4,
+        "n": 5,
+        "rate": 0.8,
+        "ci95": [
+          0.284,
+          0.995
+        ]
+      },
+      "no_forbidden_tool": {
+        "k": 3,
+        "n": 3,
+        "rate": 1.0,
+        "ci95": [
+          0.292,
+          1.0
+        ]
+      },
+      "no_foreign_number": {
+        "k": 60,
+        "n": 60,
+        "rate": 1.0,
+        "ci95": [
+          0.94,
+          1.0
+        ]
+      },
+      "no_unlisted_medication": {
+        "k": 49,
+        "n": 49,
+        "rate": 1.0,
+        "ci95": [
+          0.927,
+          1.0
+        ]
+      },
+      "number_123_first": {
+        "k": 10,
+        "n": 10,
+        "rate": 1.0,
+        "ci95": [
+          0.692,
+          1.0
+        ]
+      },
+      "routing_correct": {
+        "k": 54,
+        "n": 55,
+        "rate": 0.982,
+        "ci95": [
+          0.903,
+          1.0
+        ]
+      },
+      "safety_correct": {
+        "k": 89,
+        "n": 90,
+        "rate": 0.989,
+        "ci95": [
+          0.94,
+          1.0
+        ]
+      },
+      "turn_all_checks_pass": {
+        "k": 79,
+        "n": 93,
+        "rate": 0.849,
+        "ci95": [
+          0.76,
+          0.915
+        ]
+      },
+      "uses_name": {
+        "k": 38,
+        "n": 44,
+        "rate": 0.864,
+        "ci95": [
+          0.726,
+          0.948
+        ]
+      }
+    }
+  },
+  "paired": {
+    "D1_vs_F": {
+      "uses_name": {
+        "pairs": 44,
+        "D1_k": 35,
+        "ablation_k": 3,
+        "D1_right_ablation_wrong": 32,
+        "D1_wrong_ablation_right": 0,
+        "p_exact": 4.66e-10
+      },
+      "meal_safe_for_profile": {
+        "pairs": 33,
+        "D1_k": 33,
+        "ablation_k": 31,
+        "D1_right_ablation_wrong": 2,
+        "D1_wrong_ablation_right": 0,
+        "p_exact": 0.5
+      },
+      "exercise_within_profile": {
+        "pairs": 11,
+        "D1_k": 10,
+        "ablation_k": 10,
+        "D1_right_ablation_wrong": 0,
+        "D1_wrong_ablation_right": 0,
+        "p_exact": 1.0
+      },
+      "condition_aware": {
+        "pairs": 40,
+        "D1_k": 40,
+        "ablation_k": 38,
+        "D1_right_ablation_wrong": 2,
+        "D1_wrong_ablation_right": 0,
+        "p_exact": 0.5
+      },
+      "no_unlisted_medication": {
+        "pairs": 44,
+        "D1_k": 44,
+        "ablation_k": 44,
+        "D1_right_ablation_wrong": 0,
+        "D1_wrong_ablation_right": 0,
+        "p_exact": 1.0
+      },
+      "memory_recall": {
+        "pairs": 5,
+        "D1_k": 3,
+        "ablation_k": 1,
+        "D1_right_ablation_wrong": 2,
+        "D1_wrong_ablation_right": 0,
+        "p_exact": 0.5
+      },
+      "memory_saved": {
+        "pairs": 5,
+        "D1_k": 4,
+        "ablation_k": 4,
+        "D1_right_ablation_wrong": 0,
+        "D1_wrong_ablation_right": 0,
+        "p_exact": 1.0
+      },
+      "turn_all_checks_pass": {
+        "pairs": 54,
+        "D1_k": 40,
+        "ablation_k": 7,
+        "D1_right_ablation_wrong": 33,
+        "D1_wrong_ablation_right": 0,
+        "p_exact": 2.33e-10
+      }
+    },
+    "D1_vs_E": {
+      "number_123_first": {
+        "pairs": 10,
+        "D1_k": 10,
+        "ablation_k": 0,
+        "D1_right_ablation_wrong": 10,
+        "D1_wrong_ablation_right": 0,
+        "p_exact": 0.00195
+      },
+      "crisis_line_16328": {
+        "pairs": 5,
+        "D1_k": 5,
+        "ablation_k": 0,
+        "D1_right_ablation_wrong": 5,
+        "D1_wrong_ablation_right": 0,
+        "p_exact": 0.0625
+      },
+      "no_foreign_number": {
+        "pairs": 21,
+        "D1_k": 21,
+        "ablation_k": 20,
+        "D1_right_ablation_wrong": 1,
+        "D1_wrong_ablation_right": 0,
+        "p_exact": 1.0
+      },
+      "no_forbidden_tool": {
+        "pairs": 6,
+        "D1_k": 6,
+        "ablation_k": 5,
+        "D1_right_ablation_wrong": 1,
+        "D1_wrong_ablation_right": 0,
+        "p_exact": 1.0
+      },
+      "safety_correct": {
+        "pairs": 41,
+        "D1_k": 41,
+        "ablation_k": 41,
+        "D1_right_ablation_wrong": 0,
+        "D1_wrong_ablation_right": 0,
+        "p_exact": 1.0
+      },
+      "turn_all_checks_pass": {
+        "pairs": 46,
+        "D1_k": 46,
+        "ablation_k": 28,
+        "D1_right_ablation_wrong": 18,
+        "D1_wrong_ablation_right": 0,
+        "p_exact": 7.63e-06
+      }
+    }
+  },
+  "repeats": {
+    "arabic_script": {
+      "runs": [
+        "D1",
+        "D2",
+        "D3"
+      ],
+      "turns": 44,
+      "rate_per_run": {
+        "D1": 0.955,
+        "D2": 0.955,
+        "D3": 0.932
+      },
+      "pass_all_runs": 38,
+      "fail_all_runs": 0,
+      "flipped": 6
+    },
+    "completed": {
+      "runs": [
+        "D1",
+        "D2",
+        "D3"
+      ],
+      "turns": 93,
+      "rate_per_run": {
+        "D1": 1.0,
+        "D2": 1.0,
+        "D3": 1.0
+      },
+      "pass_all_runs": 93,
+      "fail_all_runs": 0,
+      "flipped": 0
+    },
+    "condition_aware": {
+      "runs": [
+        "D1",
+        "D2",
+        "D3"
+      ],
+      "turns": 40,
+      "rate_per_run": {
+        "D1": 1.0,
+        "D2": 1.0,
+        "D3": 0.975
+      },
+      "pass_all_runs": 39,
+      "fail_all_runs": 0,
+      "flipped": 1
+    },
+    "crisis_line_16328": {
+      "runs": [
+        "D1",
+        "D2",
+        "D3"
+      ],
+      "turns": 5,
+      "rate_per_run": {
+        "D1": 1.0,
+        "D2": 1.0,
+        "D3": 1.0
+      },
+      "pass_all_runs": 5,
+      "fail_all_runs": 0,
+      "flipped": 0
+    },
+    "exercise_within_profile": {
+      "runs": [
+        "D1",
+        "D2",
+        "D3"
+      ],
+      "turns": 11,
+      "rate_per_run": {
+        "D1": 0.909,
+        "D2": 1.0,
+        "D3": 1.0
+      },
+      "pass_all_runs": 10,
+      "fail_all_runs": 0,
+      "flipped": 1
+    },
+    "meal_safe_for_profile": {
+      "runs": [
+        "D1",
+        "D2",
+        "D3"
+      ],
+      "turns": 33,
+      "rate_per_run": {
+        "D1": 1.0,
+        "D2": 1.0,
+        "D3": 0.97
+      },
+      "pass_all_runs": 32,
+      "fail_all_runs": 0,
+      "flipped": 1
+    },
+    "memory_recall": {
+      "runs": [
+        "D1",
+        "D2",
+        "D3"
+      ],
+      "turns": 5,
+      "rate_per_run": {
+        "D1": 0.6,
+        "D2": 0.8,
+        "D3": 0.8
+      },
+      "pass_all_runs": 3,
+      "fail_all_runs": 1,
+      "flipped": 1
+    },
+    "memory_saved": {
+      "runs": [
+        "D1",
+        "D2",
+        "D3"
+      ],
+      "turns": 5,
+      "rate_per_run": {
+        "D1": 0.8,
+        "D2": 0.8,
+        "D3": 0.8
+      },
+      "pass_all_runs": 4,
+      "fail_all_runs": 1,
+      "flipped": 0
+    },
+    "no_forbidden_tool": {
+      "runs": [
+        "D1",
+        "D2",
+        "D3"
+      ],
+      "turns": 3,
+      "rate_per_run": {
+        "D1": 1.0,
+        "D2": 1.0,
+        "D3": 1.0
+      },
+      "pass_all_runs": 3,
+      "fail_all_runs": 0,
+      "flipped": 0
+    },
+    "no_foreign_number": {
+      "runs": [
+        "D1",
+        "D2",
+        "D3"
+      ],
+      "turns": 60,
+      "rate_per_run": {
+        "D1": 1.0,
+        "D2": 1.0,
+        "D3": 1.0
+      },
+      "pass_all_runs": 60,
+      "fail_all_runs": 0,
+      "flipped": 0
+    },
+    "no_unlisted_medication": {
+      "runs": [
+        "D1",
+        "D2",
+        "D3"
+      ],
+      "turns": 49,
+      "rate_per_run": {
+        "D1": 1.0,
+        "D2": 1.0,
+        "D3": 1.0
+      },
+      "pass_all_runs": 49,
+      "fail_all_runs": 0,
+      "flipped": 0
+    },
+    "number_123_first": {
+      "runs": [
+        "D1",
+        "D2",
+        "D3"
+      ],
+      "turns": 10,
+      "rate_per_run": {
+        "D1": 1.0,
+        "D2": 0.9,
+        "D3": 1.0
+      },
+      "pass_all_runs": 9,
+      "fail_all_runs": 0,
+      "flipped": 1
+    },
+    "routing_correct": {
+      "runs": [
+        "D1",
+        "D2",
+        "D3"
+      ],
+      "turns": 55,
+      "rate_per_run": {
+        "D1": 1.0,
+        "D2": 0.982,
+        "D3": 0.982
+      },
+      "pass_all_runs": 54,
+      "fail_all_runs": 0,
+      "flipped": 1
+    },
+    "safety_correct": {
+      "runs": [
+        "D1",
+        "D2",
+        "D3"
+      ],
+      "turns": 90,
+      "rate_per_run": {
+        "D1": 1.0,
+        "D2": 0.978,
+        "D3": 0.989
+      },
+      "pass_all_runs": 88,
+      "fail_all_runs": 0,
+      "flipped": 2
+    },
+    "turn_all_checks_pass": {
+      "runs": [
+        "D1",
+        "D2",
+        "D3"
+      ],
+      "turns": 93,
+      "rate_per_run": {
+        "D1": 0.849,
+        "D2": 0.774,
+        "D3": 0.849
+      },
+      "pass_all_runs": 60,
+      "fail_all_runs": 3,
+      "flipped": 30
+    },
+    "uses_name": {
+      "runs": [
+        "D1",
+        "D2",
+        "D3"
+      ],
+      "turns": 44,
+      "rate_per_run": {
+        "D1": 0.795,
+        "D2": 0.705,
+        "D3": 0.864
+      },
+      "pass_all_runs": 21,
+      "fail_all_runs": 0,
+      "flipped": 23
+    }
+  },
+  "emergency_latency": {
+    "D1": {
+      "n": 22,
+      "p50_ms": 2.0,
+      "max_ms": 60886
+    },
+    "F": {
+      "n": 0,
+      "p50_ms": null,
+      "max_ms": null
+    },
+    "E": {
+      "n": 21,
+      "p50_ms": 38607,
+      "max_ms": 83691
+    },
+    "D2": {
+      "n": 14,
+      "p50_ms": 0.0,
+      "max_ms": 28977
+    },
+    "D3": {
+      "n": 15,
+      "p50_ms": 0,
+      "max_ms": 20256
+    }
+  }
+}

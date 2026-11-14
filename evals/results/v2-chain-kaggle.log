@@ -1,0 +1,20 @@
+=== v2-noprofile start 2026-09-25T18:49:04Z
+=== v2-noprofile end 2026-09-25T19:28:29Z exit=127
+=== v2-nolayer start 2026-09-25T19:28:29Z
+=== v2-noprofile start 2026-09-25T20:10:43Z
+=== v2-noprofile end 2026-09-25T21:32:51Z exit=0
+=== v2-nolayer start 2026-09-25T21:32:51Z
+=== v2-nolayer end 2026-09-25T22:22:27Z exit=0
+=== v2-core-r3 start 2026-09-25T22:22:27Z
+=== v2-core-r3 end 2026-09-25T23:18:09Z exit=3
+=== kaggle lane stopped: v2-core-r3 exit=3 (resume with: bash evals/run_v2_chain.sh kaggle)
+skip v2-noprofile (done)
+skip v2-nolayer (done)
+=== v2-core-r3 start 2026-09-25T23:21:49Z
+=== v2-core-r3 end 2026-09-26T00:37:48Z exit=3
+=== kaggle lane stopped: v2-core-r3 exit=3 (resume with: bash evals/run_v2_chain.sh kaggle)
+skip v2-noprofile (done)
+skip v2-nolayer (done)
+=== v2-core-r3 start 2026-09-26T00:47:37Z
+=== v2-core-r3 end 2026-09-26T01:17:50Z exit=0
+=== kaggle lane done 2026-09-26T01:17:50Z

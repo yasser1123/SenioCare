@@ -1,0 +1,31 @@
+{
+  "run_id": "2026-09-26T00:47:39Z",
+  "name": "v2-core-r2",
+  "mode": "adk",
+  "cases_path": "evals/cases/07_personalization.jsonl,evals/cases/08_safety_v2.jsonl,evals/cases/09_images.jsonl,evals/cases/10_memory.jsonl",
+  "cases": 88,
+  "turns": 93,
+  "model": {
+    "model": "openai/gemma4:e4b",
+    "provider": "openai",
+    "location": "remote",
+    "api_base": "https://patrol-political-thinks-somewhat.trycloudflare.com/v1",
+    "api_key": "none",
+    "timeout_s": 120.0
+  },
+  "judge_model": null,
+  "judge_human": false,
+  "started_at": "2026-09-26T00:47:39Z",
+  "switches": {
+    "SENIOCARE_SAFETY_LAYER": "1",
+    "SENIOCARE_PROFILE_IN_PROMPT": "1"
+  },
+  "search_provider": "tavily",
+  "turn_timeout_s": 600.0,
+  "gpu_host": "kaggle-t4-gpu1",
+  "git_commit": "532bb70",
+  "human_review_rows": 0,
+  "finished_at": "2026-09-26T01:32:52+00:00",
+  "scorer_version": 3,
+  "rescored_at": "2026-09-26T06:40:14+00:00"
+}
