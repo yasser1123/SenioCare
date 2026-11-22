@@ -138,7 +138,7 @@ class TestCheckDrugFoodInteraction:
         expected_keys = [
             "status", "drugs_checked", "foods_checked",
             "harmful_interactions", "positive_interactions",
-            "neutral_interactions", "safe_combinations",
+            "neutral_interactions", "pairs_not_in_knowledge_base",
             "has_severe_interaction", "total_interactions", "disclaimer",
         ]
         for key in expected_keys:

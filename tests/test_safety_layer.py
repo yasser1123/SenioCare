@@ -55,6 +55,18 @@ def test_emergency_reply_leads_with_the_ambulance_number():
     assert not has_foreign_emergency_number(text)
 
 
+def test_emergency_reply_follows_the_user_gender():
+    f = build_emergency_reply("chest", name="منى", gender="female", has_caregivers=True)
+    m = build_emergency_reply("chest", name="أحمد", gender="male")
+    assert f.splitlines()[0].count(AMBULANCE) == 1 and "اتصلي" in f.splitlines()[0]
+    assert "اتصل " in m.splitlines()[0] and "اتصلي" not in m
+
+
+def test_caregiver_line_does_not_claim_delivery():
+    text = build_emergency_reply("generic", has_caregivers=True)
+    assert "بعتنا تنبيه" not in text and "مش متأكدين" in text
+
+
 def test_emergency_reply_mentions_caregivers_only_if_there_are_any():
     assert "عن رعايتك" not in build_emergency_reply("generic")
     assert "عن رعايتك" in build_emergency_reply("generic", has_caregivers=True)

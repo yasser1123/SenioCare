@@ -133,18 +133,45 @@ def _is_female(gender: Any) -> bool:
     return str(gender or "").strip().lower() in ("female", "f", "أنثى", "ست")
 
 
-def build_emergency_reply(category: str, *, name: Any = None, has_caregivers: bool = False) -> str:
+_FIRST_AID_F: dict[str, list[str]] = {
+    # Feminine imperatives for female users (F-22). Same steps as _FIRST_AID; the
+    # grammatical gender changes, and the "unconscious" no-food step is phrased
+    # impersonally. Not clinician-reviewed, like _FIRST_AID.
+    "chest": ["اقعدي وارتاحي ومتعمليش أي مجهود.", "فكّي أي هدوم ضيقة.", "متسوقيش العربية بنفسك."],
+    "breathing": ["اقعدي معدولة ومايلة لقدام شوية.", "افتحي الشباك وفكّي أي هدوم ضيقة.", "حاولي تاخدي نفس بهدوء وببطء."],
+    "stroke": ["افتكري الساعة اللي الأعراض بدأت فيها وقوليها للإسعاف.", "متاكليش ومتشربيش أي حاجة.",
+               "اقعدي أو نامي على جنبك في مكان آمن."],
+    "unconscious": ["لو الشخص مش بيرد بس بيتنفس، نيّميه على جنبه.", "ماينفعش ياكل أو يشرب أي حاجة.",
+                    "خليكي جنبه لحد ما الإسعاف توصل."],
+    "bleeding": ["اضغطي على الجرح جامد بقماشة نضيفة ومتشيليهاش.", "لو تقدري، ارفعي المكان المصاب لفوق."],
+    "fall_head": ["متتحركيش لو فيه وجع في رقبتك أو ضهرك.", "خلي حد يفضل جنبك ومتقوميش لوحدك."],
+    "allergy": ["لو معاكي حقنة حساسية موصوفة ليكي من الدكتور، استخدميها زي ما هو قال.",
+                "اقعدي معدولة لو التنفس صعب."],
+    "poisoning": ["متحاوليش ترجّعي غير لو الدكتور قال كده.", "خلي علبة الدوا أو المادة معاكي عشان توريها للإسعاف."],
+    "generic": ["حاولي تفضلي هادية ومتتحركيش كتير.", "خلي حد يفضل جنبك لحد ما الإسعاف توصل."],
+}
+
+# The alert task is started in the background and its delivery is not confirmed
+# when this text is shown, so the text says it was started, not that it arrived.
+def _caregiver_line(female: bool) -> str:
+    return ("📲 بدأنا نبعت تنبيه للمسؤولين عن رعايتك المسجلين في التطبيق، "
+            f"بس مش متأكدين إنه وصلهم، فمتستن{'يهمش' if female else 'اهمش'}.")
+
+
+def build_emergency_reply(category: str, *, name: Any = None, gender: Any = None, has_caregivers: bool = False) -> str:
     """Fixed emergency reply: ambulance number first, then first-aid steps."""
-    steps = _FIRST_AID.get(category) or _FIRST_AID["generic"]
+    f = _is_female(gender)
+    table = _FIRST_AID_F if f else _FIRST_AID
+    steps = table.get(category) or table["generic"]
     lines = [
-        f"🚨 {_greeting(name)}اتصل بالإسعاف فوراً على {AMBULANCE}.",
-        f"لو الكلام صعب عليك، اطلب من أي حد جنبك يتصل بـ {AMBULANCE}.",
+        f"🚨 {_greeting(name)}اتصل{'ي' if f else ''} بالإسعاف فوراً على {AMBULANCE}.",
+        f"لو الكلام صعب {'عليكي' if f else 'عليك'}، اطلب{'ي' if f else ''} من أي حد جنبك يتصل بـ {AMBULANCE}.",
         "",
         "لحد ما الإسعاف توصل:",
         *[f"• {s}" for s in steps],
     ]
     if has_caregivers:
-        lines += ["", "📲 بعتنا تنبيه للمسؤولين عن رعايتك المسجلين في التطبيق."]
+        lines += ["", _caregiver_line(f)]
     return "\n".join(lines)
 
 
@@ -161,7 +188,7 @@ def build_self_harm_reply(*, name: Any = None, gender: Any = None, has_caregiver
         f"وأنا موجود لو {'حابة' if f else 'حابب'} نتكلم.",
     ]
     if has_caregivers:
-        lines.append("📲 بعتنا تنبيه للمسؤولين عن رعايتك المسجلين في التطبيق.")
+        lines.append(_caregiver_line(f))
     return "\n".join(lines)
 
 

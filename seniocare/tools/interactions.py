@@ -62,7 +62,7 @@ def check_drug_food_interaction(food_names: list, tool_context: ToolContext) -> 
 
     try:
         interactions_found = []
-        safe_combinations = []
+        not_in_knowledge_base = []
 
         # One query for all of the user's drugs (was one query per drug x food,
         # AUDIT R-02); food matching happens in Python at word level so
@@ -91,10 +91,10 @@ def check_drug_food_interaction(food_names: list, tool_context: ToolContext) -> 
                             "advice": row["advice"],
                         })
                 else:
-                    safe_combinations.append({
+                    not_in_knowledge_base.append({
                         "drug": drug,
                         "food": food,
-                        "status": "no interaction found"
+                        "status": "not represented in the current knowledge base (no information; not confirmed safe)"
                     })
 
         # Separate harmful and positive interactions
@@ -111,7 +111,7 @@ def check_drug_food_interaction(food_names: list, tool_context: ToolContext) -> 
             "harmful_interactions": harmful,
             "positive_interactions": positive,
             "neutral_interactions": neutral,
-            "safe_combinations": safe_combinations[:3],  # Limit output
+            "pairs_not_in_knowledge_base": not_in_knowledge_base[:3],  # Limit output; absence is not evidence of safety
             "has_severe_interaction": has_severe,
             "total_interactions": len(interactions_found),
             "warning": "تحذير: تم العثور على تفاعلات خطيرة مع أدويتك!" if has_severe else None,

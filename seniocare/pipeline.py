@@ -203,7 +203,7 @@ class SenioCarePipeline(BaseAgent):
         if kind == "self_harm":
             text = build_self_harm_reply(name=name, gender=state.get("user:gender"), has_caregivers=has_caregivers)
             return self._reply(ctx, text, "template_self_harm", {KEY_EMERGENCY_KIND: kind})
-        text = build_emergency_reply(kind, name=name, has_caregivers=has_caregivers)
+        text = build_emergency_reply(kind, name=name, gender=state.get("user:gender"), has_caregivers=has_caregivers)
         return self._reply(ctx, text, "template_emergency", {KEY_EMERGENCY_KIND: kind})
 
 
