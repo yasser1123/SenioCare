@@ -1,0 +1,54 @@
+﻿Unit-test run for the SenioCare paper v4, 2026-11-22 22:12 local time, code at commit 43d2326 (pytest tests -q -rs). Skipped tests need a running API server or a disposable test database.
+
+sssssssssssssss...................sssssssssssssssssssssssssssss......... [ 24%]
+........................................................................ [ 49%]
+........................................................................ [ 74%]
+........................................................................ [ 99%]
+.                                                                        [100%]
+=========================== short test summary info ===========================
+SKIPPED [1] tests\integration\test_api_endpoints.py:54: Server not running on localhost:8080 — start with: python main.py
+SKIPPED [1] tests\integration\test_api_endpoints.py:60: Server not running on localhost:8080 — start with: python main.py
+SKIPPED [1] tests\integration\test_api_endpoints.py:76: Server not running on localhost:8080 — start with: python main.py
+SKIPPED [1] tests\integration\test_api_endpoints.py:96: Server not running on localhost:8080 — start with: python main.py
+SKIPPED [1] tests\integration\test_api_endpoints.py:105: Server not running on localhost:8080 — start with: python main.py
+SKIPPED [1] tests\integration\test_api_endpoints.py:111: Server not running on localhost:8080 — start with: python main.py
+SKIPPED [1] tests\integration\test_api_endpoints.py:122: Server not running on localhost:8080 — start with: python main.py
+SKIPPED [1] tests\integration\test_api_endpoints.py:132: Server not running on localhost:8080 — start with: python main.py
+SKIPPED [1] tests\integration\test_api_endpoints.py:142: Server not running on localhost:8080 — start with: python main.py
+SKIPPED [1] tests\integration\test_api_endpoints.py:175: Server not running on localhost:8080 — start with: python main.py
+SKIPPED [1] tests\integration\test_api_endpoints.py:186: Server not running on localhost:8080 — start with: python main.py
+SKIPPED [1] tests\integration\test_api_endpoints.py:196: Server not running on localhost:8080 — start with: python main.py
+SKIPPED [1] tests\integration\test_api_endpoints.py:215: Server not running on localhost:8080 — start with: python main.py
+SKIPPED [1] tests\integration\test_api_endpoints.py:222: Server not running on localhost:8080 — start with: python main.py
+SKIPPED [1] tests\integration\test_api_endpoints.py:229: Server not running on localhost:8080 — start with: python main.py
+SKIPPED [1] tests\test_database_tools.py:133: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:140: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:158: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:166: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:174: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:189: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:199: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:210: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:221: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:234: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:244: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:257: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:269: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:279: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:290: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:298: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:309: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:323: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:337: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:350: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:391: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:396: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:409: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:423: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:435: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:443: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:461: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:474: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+SKIPPED [1] tests\test_database_tools.py:522: TEST_DATABASE_URL not set — point it at a disposable PostgreSQL test database
+245 passed, 44 skipped in 93.45s (0:01:33)
+
